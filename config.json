@@ -1,0 +1,23 @@
+{
+    "token": "ODA3MDA5NzA1NTk1MzcxNTYw.GnRDyr.42QHaTUaOwnNg63ORFAtedyKmnNhSWMaImx1XM",
+    "twitch_token": "",
+    "twitch_id": "491011429",
+    "twitch_secret": "m7rtowl1f1lniig0sal9yi7j6rdh8p",
+    "CLIENT_ID": "807009705595371560",
+    "clientId": "807009705595371560",
+    "guildId": "547945139268616192", 
+    "DiscordServerId": "544629721976012827",
+    "twitch_clientID": "vt6vvcdm7ik1v7ubdoj6qsg59slgrv",
+    "cron": "*/10 * * * * *",
+    "channelID": "838838866558451733",
+    "roleID": "ROLE_ID(NOT REQUIRED)",
+    "channels": [
+        {
+            "ChannelName": "rubius",
+            "DiscordServer": "DISCORD_SERVER_INVITE_URL(NOT REQUIRED)",
+            "twitch_stream_id": "",
+            "discord_message_id": ""
+        }
+    ],
+    "authToken": ""
+}

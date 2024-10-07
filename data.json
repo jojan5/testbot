@@ -1,0 +1,62 @@
+{
+  "guilds": {
+    "544629721976012827": {
+      "streamers": [
+        {
+          "name": "putupau",
+          "streamerId": "74547134",
+          "lastStartedAt": "2023-12-05T22:37:31Z"
+        }
+      ],
+      "announcementChannel": "838838866558451733",
+      "reactions": [],
+      "message": "@everyone %name% **%status%**!",
+      "time": {
+        "locale": "es-MX",
+        "timeZone": "America/Mexico_City"
+      },
+      "language": "english"
+    },
+    "547945139268616192": {
+      "streamers": [
+        {
+          "name": "putupau",
+          "streamerId": "74547134",
+          "lastStartedAt": "2023-12-05T22:37:31Z"
+        }
+      ],
+      "announcementChannel": "558353181881663490",
+      "reactions": [],
+      "message": "@everyone %name% **%status%**!",
+      "time": {
+        "locale": "es-MX",
+        "timeZone": "America/Mexico_City"
+      },
+      "language": "english"
+    },
+    "677166383540338708": {
+      "streamers": [],
+      "announcementChannel": null,
+      "reactions": [],
+      "message": "@everyone %name% **%status%**!",
+      "time": {
+        "locale": "es-MX",
+        "timeZone": "America/Mexico_City"
+      },
+      "language": "english"
+    },
+    "937454023924142150": {
+      "streamers": [
+        "rubius"
+      ],
+      "announcementChannel": null,
+      "reactions": [],
+      "message": "@everyone %name% **%status%**!",
+      "time": {
+        "locale": "es-MX",
+        "timeZone": "America/Mexico_City"
+      },
+      "language": "english"
+    }
+  }
+}
