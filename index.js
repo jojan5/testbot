@@ -654,8 +654,52 @@ if (command === 'qiqi') {
 
 //-------------------------------------------------------------------------------------------------------------
 
+const { Queue } = require('bull');
+const redis = require('redis');
 
+// ... (resto de tu código de Discord.js)
 
+// Crear la cola y definir la tarea (como en el ejemplo anterior)
+
+// En tu comando de Discord:
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isCommand()) return;
+
+  if (interaction.commandName === 'mycommand') {
+    // Agregar una tarea a la cola
+    await queue.add('my-task', { data: 'Some data' });
+    await interaction.reply('Tarea en proceso');
+  }
+});
+
+//----------------
+const { spawn } = require('child_process');
+
+const workerProcess = spawn('node', ['worker.js']);
+
+workerProcess.stdout.on('data', (data) => {
+  console.log(`stdout: ${data}`);
+});
+
+workerProcess.stderr.on('data', (data) => {
+  console.error(`stderr: ${data}`);
+});//----------------------------------------------------------------
+
+const redisClient = redis.createClient();
+
+// Crear una cola
+const queue = new Queue('my-queue', { redis: { port: 6379, host: 'localhost' } });
+
+// Definir una tarea
+queue.process('my-task', async (job) => {
+  console.log('Processing job:', job.data);
+  // Aquí va el código de tu tarea, por ejemplo, enviar un mensaje a un canal
+  const channel = client.channels.cache.get('TU_ID_DE_CANAL');
+  await channel.send('Tarea completada');
+});
+
+// Agregar una tarea a la cola
+await queue.add('my-task', { data: 'Some data' });
 
 
 //----------------------------------------------------------------------------------------------
