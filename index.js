@@ -685,22 +685,29 @@ workerProcess.stderr.on('data', (data) => {
   console.error(`stderr: ${data}`);
 });//----------------------------------------------------------------
 
-const redisClient = redis.createClient();
-
-// Crear una cola
-const queue = new Queue('my-queue', { redis: { port: 6379, host: 'localhost' } });
-
-// Definir una tarea
-queue.process('my-task', async (job) => {
-  console.log('Processing job:', job.data);
-  // Aquí va el código de tu tarea, por ejemplo, enviar un mensaje a un canal
-  const channel = client.channels.cache.get('970127433879654491');
-  await channel.send('Tarea completada');
-});
-
-// Agregar una tarea a la cola
-// Agregar una tarea para realizar un cálculo complejo
-await queue.add('complex_calculation', { numbers: [1, 2, 3, 4, 5] });
+// Función principal asíncrona
+async function main() {
+	// Crear una conexión a Redis
+	const redisClient = redis.createClient();
+  
+	// Crear una cola
+	const queue = new Queue('my-queue', { redis: { port: 6379, host: 'localhost' } });
+  
+	// Definir una tarea
+	queue.process('my-task', async (job) => {
+	  console.log('Processing job:', job.data);
+	  // Aquí va el código de tu tarea, por ejemplo, enviar un mensaje a un canal
+	  const channel = client.channels.cache.get('970127433879654491');
+	  await channel.send('Tarea completada');
+	});
+  
+	// Agregar una tarea a la cola
+	// Agregar una tarea para realizar un cálculo complejo
+	await queue.add('complex_calculation', { numbers: [1, 2, 3, 4, 5] });
+  }
+  
+  // Llamar a la función principal
+  main();
 
 
 //----------------------------------------------------------------------------------------------
