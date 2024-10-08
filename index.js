@@ -699,7 +699,8 @@ queue.process('my-task', async (job) => {
 });
 
 // Agregar una tarea a la cola
-await queue.add('my-task', { data: 'Some data' });
+// Agregar una tarea para realizar un cálculo complejo
+await queue.add('complex_calculation', { numbers: [1, 2, 3, 4, 5] });
 
 
 //----------------------------------------------------------------------------------------------
