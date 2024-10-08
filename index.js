@@ -694,7 +694,7 @@ const queue = new Queue('my-queue', { redis: { port: 6379, host: 'localhost' } }
 queue.process('my-task', async (job) => {
   console.log('Processing job:', job.data);
   // Aquí va el código de tu tarea, por ejemplo, enviar un mensaje a un canal
-  const channel = client.channels.cache.get('TU_ID_DE_CANAL');
+  const channel = client.channels.cache.get('970127433879654491');
   await channel.send('Tarea completada');
 });
 
