@@ -17,6 +17,7 @@
     "animeflv-api": "^2.0.0",
     "axios": "^1.6.2",
     "bull": "^4.16.3",
+    "bullmq": "^5.18.0",
     "chillout": "^5.0.0",
     "colors": "^1.4.0",
     "const": "^1.0.0",

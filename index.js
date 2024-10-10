@@ -30,7 +30,10 @@ function dbGet(key) {
 //----------------------------------------------------------------
 
 const cheerio = require('cheerio');
-
+//const { Queue } = require('bull');
+const { Queue, Worker } = require('bullmq');
+const redis = require('redis');
+const { createClient } = require('redis');
 const { Routes } = require("discord-api-types/v9");
 const { Client, Intents, Collection, GatewayIntentBits, Partials, PresenceManager } = require("discord.js");
 //const { Player } = require("discord-player");
@@ -654,8 +657,8 @@ if (command === 'qiqi') {
 
 //-------------------------------------------------------------------------------------------------------------
 
-const { Queue } = require('bull');
-const redis = require('redis');
+
+
 
 // ... (resto de tu código de Discord.js)
 
@@ -684,33 +687,48 @@ workerProcess.stdout.on('data', (data) => {
 workerProcess.stderr.on('data', (data) => {
   console.error(`stderr: ${data}`);
 });//----------------------------------------------------------------
+// Función principal asíncrona
 
 // Función principal asíncrona
 async function main() {
-	// Crear una conexión a Redis
-	const redisClient = redis.createClient();
-  
-	// Crear una cola
-	const queue = new Queue('my-queue', { redis: { port: 6379, host: 'localhost' } });
-  
-	// Definir una tarea
-	queue.process('my-task', async (job) => {
-	  console.log('Processing job:', job.data);
-	  // Aquí va el código de tu tarea, por ejemplo, enviar un mensaje a un canal
-	  const channel = client.channels.cache.get('970127433879654491');
-	  await channel.send('Tarea completada');
+	// Crear cliente de Redis
+	const redisClient = createClient({
+	  socket: {
+		host: 'localhost',
+		port: 6379
+	  }
 	});
   
+	// Manejar errores de conexión
+	redisClient.on('error', (err) => console.log('Redis Client Error', err));
+  
+	// Conectar al cliente Redis
+	await redisClient.connect();  // Mueve el await dentro de la función async
+  
+	// Crear una cola usando BullMQ
+	const queue = new Queue('my-queue', {
+	  connection: { host: 'localhost', port: 6379 }
+	});
+  
+	// Definir un worker para procesar tareas
+	const worker = new Worker('my-queue', async (job) => {
+	  console.log('Processing job:', job.data);
+	  // Aquí va el código de tu tarea
+	  const channel = client.channels.cache.get('970127433879654491');
+	  await channel.send('Tarea completada');
+	}, { connection: { host: 'localhost', port: 6379 } });
+  
 	// Agregar una tarea a la cola
-	// Agregar una tarea para realizar un cálculo complejo
-	await queue.add('complex_calculation', { numbers: [1, 2, 3, 4, 5] });
+	await queue.add('my-task', { data: 'Some data' });
+  
+	console.log('Tarea agregada a la cola');
   }
   
-  // Llamar a la función principal
-  main();
+  // Llamar a la función main
+  main().catch((err) => console.error('Error en la ejecución:', err));
 
 
-//----------------------------------------------------------------------------------------------
+  //----------------------------------------------------------------------------------------------------
 
 console.log('Nombre de los canales de twitch:', TWITCH_CHANNEL.length);
 //---------
