@@ -770,21 +770,13 @@ client.on('interactionCreate', async interaction => {
 });
 
 //----------------
-const { spawn } = require('child_process');
 
-const workerProcess = spawn('node', ['worker.js']);
-
-workerProcess.stdout.on('data', (data) => {
-  console.log(`stdout: ${data}`);
-});
-
-workerProcess.stderr.on('data', (data) => {
-  console.error(`stderr: ${data}`);
-});//----------------------------------------------------------------
+//----------------------------------------------------------------
 // Función principal asíncrona
 
 // Función principal asíncrona
-async function main() {
+
+/* async function main() {
 	// Crear cliente de Redis
 	const redisClient = createClient({
 	  socket: {
@@ -821,7 +813,7 @@ async function main() {
   // Llamar a la función main
   main().catch((err) => console.error('Error en la ejecución:', err));
 
-
+*/
   //----------------------------------------------------------------------------------------------------
 
 console.log('Nombre de los canales de twitch:', TWITCH_CHANNEL.length);
