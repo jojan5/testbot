@@ -97,6 +97,10 @@ app.listen(port, () => {
   console.log(`Example app listening on port ${port}`)
 })
 //---------------------------------------------------------------------------------------
+app.get('/', (req, res) => res.send('El bot está vivo!'));
+app.listen(process.env.PORT || 3000);
+
+//-----------------------------------------------------------------
 
 const commands = [
 	new SlashCommandBuilder()
@@ -260,7 +264,97 @@ client.on('interactionCreate', async (interaction) => {
   });
 //--------------------------------------------------------------------------------------------------
 
-
+client.on('ready', async () => {
+	console.log(`Logged in as ${client.user.tag}`);
+  
+	const commands = [
+	  {
+		name: 'codigosgenshin',
+		description: 'Obtiene los códigos de Genshin Impact',
+	  },
+	  {
+		name: 'codigoszzz',
+		description: 'Obtiene los códigos de Zenless Zone Zero (Nap)',
+	  },
+	];
+  
+	const rest = new REST({ version: '9' }).setToken(process.env.DISCORD_TOKEN);
+  
+	// Registrar comandos en los servidores de Discord
+	try {
+	  const guildIds = client.guilds.cache.map(guild => guild.id);
+	  for (const guildId of guildIds) {
+		await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, guildId), {
+		  body: commands,
+		});
+		console.log(`Comandos agregados a ${guildId}`);
+	  }
+	} catch (error) {
+	  console.error('Error al registrar comandos:', error);
+	}
+  });
+  
+  // Comando para obtener los códigos de Genshin Impact
+  client.on('interactionCreate', async (interaction) => {
+	if (!interaction.isCommand()) return;
+  
+	const { commandName } = interaction;
+  
+	if (commandName === 'codigosgenshin') {
+	  try {
+		// Petición para obtener los códigos de Genshin
+		const response = await axios.get('https://hoyo-codes.seria.moe/codes?game=genshin');
+		const codes = response.data.codes.filter(code => code.status === 'OK');
+  
+		if (codes.length > 0) {
+		  const codeList = codes.map(code => `${code.code}: ${code.rewards}`).join('\n');
+  
+		  // Crear embed blanco para Genshin Impact
+		  const embed = new EmbedBuilder()
+			.setColor('#FFFFFF') // Blanco
+			.setTitle('Códigos de Genshin Impact')
+			.setDescription(codeList)
+			.setThumbnail('https://www.korosenai.es/wp-content/uploads/2020/12/xinyan-genshin-impact.jpg') // Imagen de Genshin Impact (JPG)
+			.setImage('https://media.tenor.com/o7ZpfQX3G8gAAAAM/genshin-impact-paimon.gif'); // GIF de Genshin Impact
+  
+		  await interaction.reply({ embeds: [embed] });
+		} else {
+		  await interaction.reply('No se encontraron códigos de Genshin Impact.');
+		}
+	  } catch (error) {
+		console.error('Error al obtener códigos de Genshin:', error);
+		await interaction.reply('Hubo un error al intentar obtener los códigos de Genshin Impact.');
+	  }
+	}
+  
+	// Comando para obtener los códigos de Zenles Zone Zero (Nap)
+	if (commandName === 'codigoszzz') {
+	  try {
+		// Petición para obtener los códigos de Zenles Zone Zero (Nap)
+		const response = await axios.get('https://hoyo-codes.seria.moe/codes?game=nap');
+		const codes = response.data.codes.filter(code => code.status === 'OK');
+  
+		if (codes.length > 0) {
+		  const codeList = codes.map(code => `${code.code}: ${code.rewards}`).join('\n');
+  
+		  // Crear embed rosa para Zenles Zone Zero (Nap)
+		  const embed = new EmbedBuilder()
+			.setColor('#FF69B4') // Rosa
+			.setTitle('Códigos de Zenles Zone Zero (Nap)')
+			.setDescription(codeList)
+			.setThumbnail('https://fastcdn.hoyoverse.com/content-v2/nap/102183/9d1acec79f0755124cdc057d5729f879_223269942321786228.png') // Imagen de Zenless Zone Zero (JPG)
+			.setImage('https://media.tenor.com/ytJhdaHvHCQAAAAM/ellen-joe-zenless-zone-zero.gif'); // GIF de Zenless Zone Zero (Nap)
+  
+		  await interaction.reply({ embeds: [embed] });
+		} else {
+		  await interaction.reply('No se encontraron códigos de Zenles Zone Zero (Nap).');
+		}
+	  } catch (error) {
+		console.error('Error al obtener códigos de Zenles Zone Zero (Nap):', error);
+		await interaction.reply('Hubo un error al intentar obtener los códigos de Zenles Zone Zero (Nap).');
+	  }
+	}
+  });
 
 
 //------------------------------------------------------------------------------------------------------------------
@@ -2120,7 +2214,7 @@ client.on("messageCreate", (message) => {
 			const help2 = new EmbedBuilder()
 			.setTitle('Comandos de /')
 
-			.setDescription("solo le agrege el comando de /buscaranime + nombre del anime te da su info y link en animeflv otra cosa si buscas por ejemplo one piece te dara todo lo relacionado a el pero si buscan One Piece Film Z les dara en especifico la pelicula PD:no me agrada Boa nadie que patea perritos es muy bueno\ngenshinarmas = te da las 3 mejores armas para un personaje de genshin si solo 3 porque creanme que las armas estan mas pesadas que los artefactos si usan el comando de artefactos se daran cuenta de lo que digo y las armas facil son el triple \ngenshinartefactos te dan los mejores artefactos de un personaje genshin\ncambiarentradas = le da la bienvenida y despedida a las personas que quieras en el canal seleccionado  ")
+			.setDescription("solo le agrege el comando de /buscaranime + nombre del anime te da su info y link en animeflv otra cosa si buscas por ejemplo one piece te dara todo lo relacionado a el pero si buscan One Piece Film Z les dara en especifico la pelicula PD:no me agrada Boa nadie que patea perritos es muy bueno\ngenshinarmas = te da las 3 mejores armas para un personaje de genshin si solo 3 porque creanme que las armas estan mas pesadas que los artefactos si usan el comando de artefactos se daran cuenta de lo que digo y las armas facil son el triple \ngenshinartefactos te dan los mejores artefactos de un personaje genshin\ncambiarentradas = le da la bienvenida y despedida a las personas que quieras en el canal seleccionado \ncodigoszzz = te da los codigos actuales del zzz (nap) \ncodigos genshin = ya deberias saberlo no?  ")
 			.setFooter({
 				text: "El nombre completo de las hermanas yuima son dark-yuima-jojan y susa-yuima-jojan"
 			})
