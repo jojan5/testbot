@@ -277,10 +277,10 @@ client.on('ready', async () => {
 		await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, guildId), {
 		  body: commands,
 		});
-		console.log(`Comandos agregados a ${guildId}`);
+		console.log(`Comandos agregados a de ver cosas de genshin a  ${guildId}`);
 	  }
 	} catch (error) {
-	  console.error('Error al registrar comandos:', error);
+	  console.error('Error al registrar comandos: ', error);
 	}
   });
   
