@@ -93,6 +93,15 @@ const client = new Client({
 //-----------------------------------------------------------------
 
 const commands = [
+
+	new SlashCommandBuilder()
+	.setName('codigoszzz')
+	.setDescription('codigoszzz')
+	.addChannelOption(option =>
+	  option.setName('canal')
+		.setDescription('Selecciona el canal de entradas y salidas')
+		.setRequired(true)),
+
 	new SlashCommandBuilder()
 	  .setName('anime')
 	  .setDescription('Busca un anime en AnimeFLV.')
@@ -270,17 +279,29 @@ client.on('ready', async () => {
   
 	const rest = new REST({ version: '9' }).setToken(process.env.DISCORD_TOKEN);
   
-	// Registrar comandos en los servidores de Discord
+	// Registrar comandos solo si el bot tiene permisos
 	try {
 	  const guildIds = client.guilds.cache.map(guild => guild.id);
 	  for (const guildId of guildIds) {
-		await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, guildId), {
-		  body: commands,
-		});
-		console.log(`Comandos agregados a de ver cosas de genshin a  ${guildId}`);
+		const guild = client.guilds.cache.get(guildId);
+  
+		// Espera a que el bot esté completamente listo en el servidor
+		await guild.members.fetch();
+  
+		// Verificar si el bot tiene permisos de administrador
+		const botPermissions = guild.members.me.permissions.has(PermissionsBitField.Flags.Administrator);
+		if (botPermissions) {
+		  // Registrar comandos en el servidor
+		  await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, guildId), {
+			body: commands,
+		  });
+		  console.log(`Comandos agregados a ${guildId}: ${JSON.stringify(commands)}`);
+		} else {
+		  console.log(`El bot no tiene permisos para registrar comandos en el servidor: ${guild.name}`);
+		}
 	  }
 	} catch (error) {
-	  console.error('Error al registrar comandos: ', error);
+	  console.error('Error al registrar comandos:', error);
 	}
   });
   
@@ -340,8 +361,8 @@ client.on('ready', async () => {
 		  await interaction.reply('No se encontraron códigos de Zenles Zone Zero (Nap).');
 		}
 	  } catch (error) {
-		console.error('Error al obtener códigos de Zenles Zone Zero (Nap):', error);
-		await interaction.reply('Hubo un error al intentar obtener los códigos de Zenles Zone Zero (Nap).');
+		console.error('Error al obtener códigos de Zenless Zone Zero (Nap):', error);
+		await interaction.reply('Hubo un error al intentar obtener los códigos de Zenless Zone Zero (Nap).');
 	  }
 	}
   });
