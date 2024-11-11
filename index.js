@@ -35,7 +35,7 @@ const { Queue, Worker } = require('bullmq');
 const redis = require('redis');
 const { createClient } = require('redis');
 const { Routes } = require("discord-api-types/v9");
-const { Client, Intents, Collection, GatewayIntentBits, Partials, PresenceManager } = require("discord.js");
+const { Client, Intents, Collection, GatewayIntentBits, Partials, PresenceManager, PermissionsBitField } = require("discord.js");
 //const { Player } = require("discord-player");
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, Events } = require('discord.js');
 const fs = require("node:fs");
@@ -507,38 +507,79 @@ for(const folder of functionFolders) {
     for(const file of functionFiles) require('./functions/'+folder+'/'+file)(client,fns);
 }
 
+//--------------------------------------------------------
 
-
-// Ruta al directorio que contiene los comandos
-/*const commandsPath = path.join(__dirname, 'commands');
-
-// Lee todos los archivos en el directorio 'commands' que terminan con '.js'
-const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
-
-// Recorre cada archivo de comando
-for (const file of commandFiles) {
-    const filePath = path.join(commandsPath, file);
-
-    try {
-        // Requiere el archivo del comando
-        const command = require(filePath);
-
-        // Asigna el comando al cliente
-        client.commands.set(command.data.name, command);
-
-        // Agrega los datos del comando al array 'commands'
-        commands.push(command.data.toJSON());
-    } catch (error) {
-        // Maneja errores al cargar el comando
-        console.error(`Error al cargar el comando desde ${filePath}:`, error);
-    }
-}
-
-// Ahora `client.commands` contiene todos tus comandos cargados y disponibles para su uso
-// Puedes acceder a un comando específico usando client.commands.get('nombre_del_comando')
-
-// Exportar el cliente y el array de comandos para usarlos en otros módulos
-module.exports = { client, commands };*/
+// Función para registrar los comandos
+async function registerCommands() {
+	const commands = [
+	  new SlashCommandBuilder()
+		.setName('navidad')
+		.setDescription('Envía los mensajes de Navidad y Año Nuevo'),
+	];
+  
+	const guilds = client.guilds.cache;
+	
+	// Registrar comando solo en servidores donde el bot tenga permisos adecuados
+	for (const [guildId, guild] of guilds) {
+	  try {
+		const member = await guild.members.fetch(client.user.id);
+		const hasPermission = member.permissions.has(PermissionsBitField.Flags.ManageGuild);
+		
+		if (hasPermission) {
+		  await guild.commands.set(commands);
+		  console.log(`Comando registrado en el servidor: ${guild.name}`);
+		} else {
+		  console.log(`No tiene permisos suficientes en el servidor: ${guild.name}`);
+		}
+	  } catch (error) {
+		console.error(`Error al registrar el comando en ${guild.name}:`, error);
+	  }
+	}
+  }
+  
+  // Registrar comandos cuando el bot esté listo
+  client.once('ready', async () => {
+	console.log('Bot listo');
+	await registerCommands();
+  });
+  
+  // Manejar el comando de barra
+  client.on('interactionCreate', async (interaction) => {
+	if (!interaction.isCommand()) return;
+  
+	const { commandName } = interaction;
+	if (commandName === 'navidad') {
+	  try {
+		const channel = interaction.channel; // El canal en el que se ejecuta el comando
+  
+		// Embed para Feliz Navidad
+		const embed1 = new EmbedBuilder()
+		  .setColor('#FFFFFF') // Blanco
+		  .setTitle('¡Feliz Navidad! 🎄🎁')
+		  .setDescription('¡Disfruta de este video y celebra con nosotros!')
+		  .setURL('https://youtu.be/qD-W4m-R2U8?si=jdXH7moYpb50m7-t')
+		  .setImage('https://img.youtube.com/vi/qD-W4m-R2U8/0.jpg') // Miniatura
+		  .setFooter({ text: 'Yey, es diciembre' });
+  
+		// Embed para Año Nuevo
+		const embed2 = new EmbedBuilder()
+		  .setColor('#00FF00') // Verde
+		  .setTitle('¡Y próspero Año Nuevo! 🎉🥂')
+		  .setDescription('¡Mira este video y celebremos juntos!')
+		  .setURL('https://www.youtube.com/watch?v=WYDhQuJqiuo')
+		  .setImage('https://img.youtube.com/vi/WYDhQuJqiuo/0.jpg') // Miniatura
+		  .setFooter({ text: 'Yey, es diciembre' });
+  
+		// Enviar los embeds al canal
+		await channel.send({ content: '@everyone', embeds: [embed1, embed2] });
+		console.log('Embeds enviados con éxito');
+		await interaction.reply({ content: '¡Embeds de Navidad y Año Nuevo enviados!', ephemeral: true });
+	  } catch (error) {
+		console.error('Error al enviar los embeds:', error);
+		await interaction.reply({ content: 'Hubo un error al enviar los embeds.', ephemeral: true });
+	  }
+	}
+  });
 //----------------------------------
 function getRandomColor() {
 	// Generar un color hexadecimal aleatorio
