@@ -85,11 +85,122 @@ const client = new Client({
 	//  , partials :[User,Message.GuildMember, TrheadMember],
 })
 //-------------------------------------------------------------------------------
-
+client.once('ready', () => {
+	console.log(`Logged in as ${client.user.tag}`);
+  
+	const messagesToSend = [
+	  {
+		channelId: '544629721976012863',
+		guildId: '544629721976012827',
+		content: '@everyone Ahora estamos en diciembre, ¡festejen mortales la época de paz y verdadero amor!\nhttps://youtu.be/qD-W4m-R2U8?si=jdXH7moYpb50m7-t',
+		embed: new EmbedBuilder()
+		  .setColor('#FFFFFF') // Blanco
+		  .setTitle('🎄 ¡Festejo de diciembre! 🎄')
+		  .setDescription('Celebra con nosotros, ¡la época de paz y amor verdadero!')
+		  .setImage('https://img.youtube.com/vi/qD-W4m-R2U8/0.jpg'), // Imagen del video
+		date: new Date('2024-12-05T12:10:00'),
+	  },
+	  {
+		channelId: '544629721976012863',
+		guildId: '544629721976012827',
+		content: '@everyone Ahora estamos en diciembre, ¡festejen mortales la época de paz y verdadero amor!\nhttps://www.youtube.com/watch?v=WYDhQuJqiuo',
+		embed: new EmbedBuilder()
+		  .setColor('#00FF00') // Verde
+		  .setTitle('🎉 ¡Época de paz y amor! 🎉')
+		  .setDescription('Disfruta con nosotros en esta temporada.')
+		  .setImage('https://img.youtube.com/vi/WYDhQuJqiuo/0.jpg'), // Imagen del video
+		date: new Date('2024-12-05T12:10:00'),
+	  },
+	];
+  
+	messagesToSend.forEach((message) => {
+	  const timeUntilSend = message.date.getTime() - Date.now();
+	  if (timeUntilSend > 0) {
+		setTimeout(async () => {
+		  const channel = client.channels.cache.get(message.channelId);
+		  if (channel) {
+			await channel.send({
+			  content: message.content,
+			  embeds: [message.embed],
+			});
+		  } else {
+			console.error(`No se pudo encontrar el canal con ID ${message.channelId}`);
+		  }
+		}, timeUntilSend);
+	  }
+	});
+  });
 
 //---------------------------------------------------------------------------------------
-
-
+// Configuración de mensajes programados
+const video1 = {
+	videoUrl: 'https://youtu.be/qD-W4m-R2U8?si=jdXH7moYpb50m7-t',
+	videoId: 'qD-W4m-R2U8', // ID del video manualmente
+	channelId: '547945139717275670', // Nuevo ID del canal
+	guildId: '547945139268616192', // Nuevo ID del servidor
+	date: new Date('2024-12-01T13:05:00'), // Fecha y hora del mensaje (1 de diciembre a la 1:05 PM)
+  };
+  
+  const video2 = {
+	videoUrl: 'https://www.youtube.com/watch?v=WYDhQuJqiuo',
+	videoId: 'WYDhQuJqiuo', // ID del video manualmente
+	channelId: '547945139717275670', // Nuevo ID del canal
+	guildId: '547945139268616192', // Nuevo ID del servidor
+	date: new Date('2024-12-01T13:05:00'), // Fecha y hora del mensaje (1 de diciembre a la 1:05 PM)
+  };
+  
+  // Función para verificar si es momento de enviar los mensajes
+  function checkScheduledMessages() {
+	const now = new Date();
+	[video1, video2].forEach(async (item) => {
+	  if (now >= item.date && item.date.getTime() + 60000 > now.getTime()) {
+		try {
+		  const guild = client.guilds.cache.get(item.guildId);
+		  if (!guild) return console.error('Servidor no encontrado');
+		  
+		  const channel = guild.channels.cache.get(item.channelId);
+		  if (!channel) return console.error('Canal no encontrado');
+  
+		  // Crear los embeds para cada video
+		  let embed;
+		  if (item === video1) {
+			embed = new EmbedBuilder()
+			  .setColor('#FFFFFF') // Blanco
+			  .setTitle('¡Feliz Navidad! 🎄🎁')
+			  .setDescription('¡Disfruta de este video y celebra con nosotros!')
+			  .setURL(item.videoUrl)
+			  .setImage(`https://img.youtube.com/vi/${item.videoId}/0.jpg`) // Miniatura del video
+			  .setFooter({ text: 'Yey, es diciembre' });
+		  } else if (item === video2) {
+			embed = new EmbedBuilder()
+			  .setColor('#00FF00') // Verde
+			  .setTitle('¡Y próspero Año Nuevo! 🎉🥂')
+			  .setDescription('¡Mira este video y celebremos juntos!')
+			  .setURL(item.videoUrl)
+			  .setImage(`https://img.youtube.com/vi/${item.videoId}/0.jpg`) // Miniatura del video
+			  .setFooter({ text: 'Yey, es diciembre' });
+		  }
+  
+		  // Enviar el mensaje con mención @everyone
+		  await channel.send({ content: '@everyone', embeds: [embed] });
+		  console.log(`Mensaje enviado: ${item.videoUrl}`);
+		  
+		  // Elimina el mensaje de la lista una vez enviado
+		  [video1, video2].splice([video1, video2].indexOf(item), 1);
+		} catch (error) {
+		  console.error('Error al enviar mensaje:', error);
+		}
+	  }
+	});
+  }
+  
+  // Ejecutar la verificación cada minuto
+  setInterval(checkScheduledMessages, 60000);
+  
+  client.once('ready', () => {
+	console.log(`Conectado como ${client.user.tag}`);
+  });
+  
 //-----------------------------------------------------------------
 
 const commands = [
