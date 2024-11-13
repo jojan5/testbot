@@ -206,12 +206,17 @@ const video1 = {
 const commands = [
 
 	new SlashCommandBuilder()
-	.setName('codigoszzz')
-	.setDescription('codigoszzz')
-	.addChannelOption(option =>
-	  option.setName('canal')
-		.setDescription('Selecciona el canal de entradas y salidas')
-		.setRequired(true)),
+    .setName('codigos_honkai')
+    .setDescription('Obtén los últimos códigos de Honkai: Star Rail'),
+  new SlashCommandBuilder()
+    .setName('codigos_honkai3d')
+    .setDescription('Obtén los últimos códigos de Honkai Impact 3rd'),
+  new SlashCommandBuilder()
+    .setName('codigosgenshin')
+    .setDescription('Obtiene los códigos de Genshin Impact'),
+  new SlashCommandBuilder()
+    .setName('codigoszzz')
+    .setDescription('Obtiene los códigos de Zenless Zone Zero (Nap)'),
 
 	new SlashCommandBuilder()
 	  .setName('anime')
@@ -374,110 +379,98 @@ client.on('interactionCreate', async (interaction) => {
   });
 //--------------------------------------------------------------------------------------------------
 
-client.on('ready', async () => {
-	console.log(`Logged in as ${client.user.tag}`);
   
-	const commands = [
-	  {
-		name: 'codigosgenshin',
-		description: 'Obtiene los códigos de Genshin Impact',
-	  },
-	  {
-		name: 'codigoszzz',
-		description: 'Obtiene los códigos de Zenless Zone Zero (Nap)',
-	  },
-	];
-  
-	const rest = new REST({ version: '9' }).setToken(process.env.DISCORD_TOKEN);
-  
-	// Registrar comandos solo si el bot tiene permisos
-	try {
-	  const guildIds = client.guilds.cache.map(guild => guild.id);
-	  for (const guildId of guildIds) {
-		const guild = client.guilds.cache.get(guildId);
-  
-		// Espera a que el bot esté completamente listo en el servidor
-		await guild.members.fetch();
-  
-		// Verificar si el bot tiene permisos de administrador
-		const botPermissions = guild.members.me.permissions.has(PermissionsBitField.Flags.Administrator);
-		if (botPermissions) {
-		  // Registrar comandos en el servidor
-		  await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, guildId), {
-			body: commands,
-		  });
-		  console.log(`Comandos agregados a ${guildId}: ${JSON.stringify(commands)}`);
-		} else {
-		  console.log(`El bot no tiene permisos para registrar comandos en el servidor: ${guild.name}`);
-		}
-	  }
-	} catch (error) {
-	  console.error('Error al registrar comandos:', error);
-	}
-  });
-  
-  // Comando para obtener los códigos de Genshin Impact
+  // Manejar comandos de barra
   client.on('interactionCreate', async (interaction) => {
 	if (!interaction.isCommand()) return;
   
 	const { commandName } = interaction;
   
-	if (commandName === 'codigosgenshin') {
+	if (commandName === 'codigos_honkai') {
 	  try {
-		// Petición para obtener los códigos de Genshin
-		const response = await axios.get('https://hoyo-codes.seria.moe/codes?game=genshin');
-		const codes = response.data.codes.filter(code => code.status === 'OK');
+		const response = await fetch('https://hoyo-codes.seria.moe/codes?game=hkrpg');
+		const data = await response.json();
+		const codes = data.codes.map(code => `**${code.code}** - ${code.rewards}`).join('\n') || 'No hay códigos disponibles en este momento.';
   
-		if (codes.length > 0) {
-		  const codeList = codes.map(code => `${code.code}: ${code.rewards}`).join('\n');
+		const embed = new EmbedBuilder()
+		  .setColor('#722ED1') 
+		  .setTitle('Códigos de Honkai: Star Rail')
+		  .setDescription(codes)
+		  .setThumbnail('https://i.blogs.es/ec9d1f/honkai-star-rail/1366_2000.jpeg')
+		  .setImage('https://64.media.tumblr.com/56c5739856e2e9fc0ebc589a09cefc44/7cc140a4ab9024c1-f2/s400x600/2fba33a0f6640207d2575fdaa5e4cc28860a74c5.gif')
+		  .setFooter({ text: '¡Canjea tus códigos en el juego!' });
   
-		  // Crear embed blanco para Genshin Impact
-		  const embed = new EmbedBuilder()
-			.setColor('#FFFFFF') // Blanco
-			.setTitle('Códigos de Genshin Impact')
-			.setDescription(codeList)
-			.setThumbnail('https://www.korosenai.es/wp-content/uploads/2020/12/xinyan-genshin-impact.jpg') // Imagen de Genshin Impact (JPG)
-			.setImage('https://media.tenor.com/o7ZpfQX3G8gAAAAM/genshin-impact-paimon.gif'); // GIF de Genshin Impact
-  
-		  await interaction.reply({ embeds: [embed] });
-		} else {
-		  await interaction.reply('No se encontraron códigos de Genshin Impact.');
-		}
+		await interaction.reply({ embeds: [embed] });
 	  } catch (error) {
-		console.error('Error al obtener códigos de Genshin:', error);
-		await interaction.reply('Hubo un error al intentar obtener los códigos de Genshin Impact.');
+		console.error('Error al obtener los códigos:', error);
+		await interaction.reply({ content: 'Hubo un error al intentar obtener los códigos. Inténtalo más tarde.', ephemeral: true });
 	  }
 	}
   
-	// Comando para obtener los códigos de Zenles Zone Zero (Nap)
+	if (commandName === 'codigos_honkai3d') {
+	  try {
+		const response = await fetch('https://hoyo-codes.seria.moe/codes?game=honkai3rd');
+		const data = await response.json();
+		const codes = data.codes.map(code => `**${code.code}** - ${code.rewards}`).join('\n') || 'No hay códigos disponibles en este momento.';
+  
+		const embed = new EmbedBuilder()
+		  .setColor('#FF4500')
+		  .setTitle('Códigos de Honkai Impact 3rd')
+		  .setDescription(codes)
+		  .setThumbnail('https://static.wikia.nocookie.net/honkaiimpact3_gamepedia_en/images/4/4e/1024x1024bb_01.jpg/revision/latest/scale-to-width-down/250?cb=20211218132057')
+		  .setImage('https://i.pinimg.com/originals/c2/d1/d4/c2d1d40b282c96a37c8dc3855a87b8dc.gif')
+		  .setFooter({ text: '¡Canjea tus códigos en el juego!' });
+  
+		await interaction.reply({ embeds: [embed] });
+	  } catch (error) {
+		console.error('Error al obtener los códigos:', error);
+		await interaction.reply({ content: 'Hubo un error al intentar obtener los códigos. Inténtalo más tarde.', ephemeral: true });
+	  }
+	}
+  
+	if (commandName === 'codigosgenshin') {
+	  try {
+		const response = await fetch('https://hoyo-codes.seria.moe/codes?game=genshin');
+		const data = await response.json();
+		const codes = data.codes.map(code => `**${code.code}** - ${code.rewards}`).join('\n') || 'No hay códigos disponibles en este momento.';
+  
+		const embed = new EmbedBuilder()
+		  .setColor('#FFFFFF')
+		  .setTitle('Códigos de Genshin Impact')
+		  .setDescription(codes)
+		  .setThumbnail('https://www.korosenai.es/wp-content/uploads/2020/12/xinyan-genshin-impact.jpg')
+		  .setImage('https://media.tenor.com/o7ZpfQX3G8gAAAAM/genshin-impact-paimon.gif')
+		  .setFooter({ text: '¡Canjea tus códigos en el juego!' });
+  
+		await interaction.reply({ embeds: [embed] });
+	  } catch (error) {
+		console.error('Error al obtener los códigos:', error);
+		await interaction.reply({ content: 'Hubo un error al intentar obtener los códigos. Inténtalo más tarde.', ephemeral: true });
+	  }
+	}
+  
 	if (commandName === 'codigoszzz') {
 	  try {
-		// Petición para obtener los códigos de Zenles Zone Zero (Nap)
-		const response = await axios.get('https://hoyo-codes.seria.moe/codes?game=nap');
-		const codes = response.data.codes.filter(code => code.status === 'OK');
+		const response = await fetch('https://hoyo-codes.seria.moe/codes?game=nap');
+		const data = await response.json();
+		const codes = data.codes.map(code => `**${code.code}** - ${code.rewards}`).join('\n') || 'No hay códigos disponibles en este momento.';
   
-		if (codes.length > 0) {
-		  const codeList = codes.map(code => `${code.code}: ${code.rewards}`).join('\n');
+		const embed = new EmbedBuilder()
+		  .setColor('#FF69B4')
+		  .setTitle('Códigos de Zenless Zone Zero (Nap)')
+		  .setDescription(codes)
+		  .setThumbnail('https://fastcdn.hoyoverse.com/content-v2/nap/102183/9d1acec79f0755124cdc057d5729f879_223269942321786228.png')
+		  .setImage('https://media.tenor.com/ytJhdaHvHCQAAAAM/ellen-joe-zenless-zone-zero.gif')
+		  .setFooter({ text: '¡Canjea tus códigos en el juego!' });
   
-		  // Crear embed rosa para Zenles Zone Zero (Nap)
-		  const embed = new EmbedBuilder()
-			.setColor('#FF69B4') // Rosa
-			.setTitle('Códigos de Zenles Zone Zero (Nap)')
-			.setDescription(codeList)
-			.setThumbnail('https://fastcdn.hoyoverse.com/content-v2/nap/102183/9d1acec79f0755124cdc057d5729f879_223269942321786228.png') // Imagen de Zenless Zone Zero (JPG)
-			.setImage('https://media.tenor.com/ytJhdaHvHCQAAAAM/ellen-joe-zenless-zone-zero.gif'); // GIF de Zenless Zone Zero (Nap)
-  
-		  await interaction.reply({ embeds: [embed] });
-		} else {
-		  await interaction.reply('No se encontraron códigos de Zenles Zone Zero (Nap).');
-		}
+		await interaction.reply({ embeds: [embed] });
 	  } catch (error) {
-		console.error('Error al obtener códigos de Zenless Zone Zero (Nap):', error);
-		await interaction.reply('Hubo un error al intentar obtener los códigos de Zenless Zone Zero (Nap).');
+		console.error('Error al obtener los códigos:', error);
+		await interaction.reply({ content: 'Hubo un error al intentar obtener los códigos. Inténtalo más tarde.', ephemeral: true });
 	  }
 	}
   });
-
+  
 
 //------------------------------------------------------------------------------------------------------------------
 
@@ -706,9 +699,66 @@ client.on('messageCreate', async (message) => {
 });
 
 //--------------------------------------------------------------------------------------------------
-
-
-
+async function registerCommands() {
+	const commands = [
+	  new SlashCommandBuilder()
+		.setName('codigos_wuwa')
+		.setDescription('Obtén los últimos códigos de Wuthering Waves'),
+	];
+  
+	const guilds = client.guilds.cache;
+  
+	// Registrar comandos solo en servidores donde el bot tenga permisos adecuados
+	for (const [guildId, guild] of guilds) {
+	  try {
+		const member = await guild.members.fetch(client.user.id);
+		const hasPermission = member.permissions.has(PermissionsBitField.Flags.ManageGuild);
+  
+		if (hasPermission) {
+		  await guild.commands.set(commands);
+		  console.log(`Comando registrado en el servidor: ${guild.name}`);
+		} else {
+		  console.log(`No tiene permisos suficientes en el servidor: ${guild.name}`);
+		}
+	  } catch (error) {
+		console.error(`Error al registrar el comando en ${guild.name}:`, error);
+	  }
+	}
+  }
+// Manejar comandos de barra
+client.on('interactionCreate', async (interaction) => {
+	if (!interaction.isCommand()) return;
+  
+	const { commandName } = interaction;
+  
+	if (commandName === 'codigos_wuwa') {
+	  try {
+		// Llamada a la API
+		const response = await fetch('https://api.resonance.rest/codes');
+		if (!response.ok) {
+		  return interaction.reply({ content: 'No se pudieron obtener los códigos en este momento. Inténtalo más tarde.', ephemeral: true });
+		}
+		const data = await response.json();
+  
+		// Formatear los códigos
+		const codes = data.codes.map(code => `**${code.name}** - ${code.reward}`).join('\n') || 'No hay códigos disponibles en este momento.';
+  
+		// Crear el embed
+		const embed = new EmbedBuilder()
+		  .setColor('#003366') // Azul oscuro
+		  .setTitle('Códigos de Wuthering Waves')
+		  .setDescription(codes)
+		  .setThumbnail('https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQkmsLi-PweF4K3vppsBMmbrQ2zFikTpYHdNg&s')
+		  .setImage('https://media.tenor.com/bUdiwYNKvz8AAAAM/wuwa-wuthering-waves.gif')
+		  .setFooter({ text: '¡Canjea tus códigos en el juego para obtener recompensas!' });
+  
+		await interaction.reply({ embeds: [embed] });
+	  } catch (error) {
+		console.error('Error al obtener los códigos:', error);
+		await interaction.reply({ content: 'Hubo un error al intentar obtener los códigos. Inténtalo más tarde.', ephemeral: true });
+	  }
+	}
+  });
 
 
 //--------------------------------------------------------------------------------------------------------------------------
@@ -2387,7 +2437,7 @@ client.on("messageCreate", (message) => {
 			const help2 = new EmbedBuilder()
 			.setTitle('Comandos de /')
 
-			.setDescription("solo le agrege el comando de /buscaranime + nombre del anime te da su info y link en animeflv otra cosa si buscas por ejemplo one piece te dara todo lo relacionado a el pero si buscan One Piece Film Z les dara en especifico la pelicula PD:no me agrada Boa nadie que patea perritos es muy bueno\ngenshinarmas = te da las 3 mejores armas para un personaje de genshin si solo 3 porque creanme que las armas estan mas pesadas que los artefactos si usan el comando de artefactos se daran cuenta de lo que digo y las armas facil son el triple \ngenshinartefactos te dan los mejores artefactos de un personaje genshin\ncambiarentradas = le da la bienvenida y despedida a las personas que quieras en el canal seleccionado \ncodigoszzz = te da los codigos actuales del zzz (nap) \ncodigos genshin = ya deberias saberlo no?  ")
+			.setDescription("solo le agrege el comando de /buscaranime + nombre del anime te da su info y link en animeflv otra cosa si buscas por ejemplo one piece te dara todo lo relacionado a el pero si buscan One Piece Film Z les dara en especifico la pelicula PD:no me agrada Boa nadie que patea perritos es muy bueno\ngenshinarmas = te da las 3 mejores armas para un personaje de genshin si solo 3 porque creanme que las armas estan mas pesadas que los artefactos si usan el comando de artefactos se daran cuenta de lo que digo y las armas facil son el triple \ngenshinartefactos te dan los mejores artefactos de un personaje genshin\ncambiarentradas = le da la bienvenida y despedida a las personas que quieras en el canal seleccionado \ncodigoszzz = te da los codigos actuales del zzz (nap) \ncodigos genshin = ya deberias saberlo no?\ncodigos_wuwa= encerio necesitas saberlo?\ncodigoshonkai = si de ambos honkai....  ")
 			.setFooter({
 				text: "El nombre completo de las hermanas yuima son dark-yuima-jojan y susa-yuima-jojan"
 			})
