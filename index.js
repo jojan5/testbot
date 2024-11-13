@@ -1151,13 +1151,22 @@ const RIR1 = new EmbedBuilder()
 		const guild = member.guild;
 		if (!newUsers[guild.id]) newUsers[guild.id] = new Discord.Collection();
 		newUsers[guild.id].set(member.id, member.user);
-		if (guild.channels.cache.get(canalSeleccionadoId)) {
+	
+		if (typeof canalSeleccionadoId === "undefined") {
+			console.log("No hay un canal seleccionado para despedir miembros.");
+			return; // Salimos de la función si no está definido
+		}
+	
+		const canal = guild.channels.cache.get(canalSeleccionadoId);
+		if (canal) {
 			if (newUsers[guild.id].size > 0) {
 				const userlist = newUsers[guild.id].map(u => u.toString()).join(" ");
-				guild.channels.cache.get(canalSeleccionadoId).send("Adios!\n" + userlist);
-				guild.channels.cache.get(canalSeleccionadoId).send({ embeds: [RIR1] });
+				canal.send("Adios!\n" + userlist);
+				canal.send({ embeds: [RIR1] });
 				newUsers[guild.id].clear();
 			}
+		} else {
+			console.log("El canal especificado no existe en este servidor.");
 		}
 	});
 	
@@ -1165,13 +1174,22 @@ const RIR1 = new EmbedBuilder()
 		const guild = member.guild;
 		if (!newUsers[guild.id]) newUsers[guild.id] = new Discord.Collection();
 		newUsers[guild.id].set(member.id, member.user);
-		if (guild.channels.cache.get(canalSeleccionadoId)) {
+	
+		if (typeof canalSeleccionadoId === "undefined") {
+			console.log("No hay un canal seleccionado para dar la bienvenida.");
+			return; // Salimos de la función si no está definido
+		}
+	
+		const canal = guild.channels.cache.get(canalSeleccionadoId);
+		if (canal) {
 			if (newUsers[guild.id].size > 0) {
 				const userlist = newUsers[guild.id].map(u => u.toString()).join(" ");
-				guild.channels.cache.get(canalSeleccionadoId).send("Bienvenido mortal disfruta tu estadia OwO !\n" + userlist);
-				guild.channels.cache.get(canalSeleccionadoId).send({ embeds: [RIR] });
+				canal.send("Bienvenido mortal disfruta tu estadia OwO !\n" + userlist);
+				canal.send({ embeds: [RIR] });
 				newUsers[guild.id].clear();
 			}
+		} else {
+			console.log("El canal especificado no existe en este servidor.");
 		}
 	});
 	//-------------------------------------------------------------------------------------------------------------------
