@@ -204,7 +204,9 @@ const video1 = {
 //-----------------------------------------------------------------
 
 const commands = [
-
+	new SlashCommandBuilder()
+	.setName('navidad')
+	.setDescription('Envía los mensajes de Navidad y Año Nuevo'),
 	new SlashCommandBuilder()
     .setName('codigos_honkai')
     .setDescription('Obtén los últimos códigos de Honkai: Star Rail'),
@@ -502,33 +504,7 @@ for(const folder of functionFolders) {
 
 //--------------------------------------------------------
 
-// Función para registrar los comandos
-async function registerCommands() {
-	const commands = [
-	  new SlashCommandBuilder()
-		.setName('navidad')
-		.setDescription('Envía los mensajes de Navidad y Año Nuevo'),
-	];
-  
-	const guilds = client.guilds.cache;
-	
-	// Registrar comando solo en servidores donde el bot tenga permisos adecuados
-	for (const [guildId, guild] of guilds) {
-	  try {
-		const member = await guild.members.fetch(client.user.id);
-		const hasPermission = member.permissions.has(PermissionsBitField.Flags.ManageGuild);
-		
-		if (hasPermission) {
-		  await guild.commands.set(commands);
-		  console.log(`Comando registrado en el servidor: ${guild.name}`);
-		} else {
-		  console.log(`No tiene permisos suficientes en el servidor: ${guild.name}`);
-		}
-	  } catch (error) {
-		console.error(`Error al registrar el comando en ${guild.name}:`, error);
-	  }
-	}
-  }
+
   
   // Registrar comandos cuando el bot esté listo
   client.once('ready', async () => {
