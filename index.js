@@ -28,7 +28,7 @@ function dbGet(key) {
 }
 
 //----------------------------------------------------------------
-
+const { Mistral } = require('@mistralai/mistralai');
 const cheerio = require('cheerio');
 //const { Queue } = require('bull');
 const { Queue, Worker } = require('bullmq');
@@ -205,6 +205,14 @@ const video1 = {
 
 const commands = [
 	new SlashCommandBuilder()
+    .setName("mistral")
+    .setDescription("Haz una pregunta a Mistral")
+    .addStringOption(option =>
+      option.setName("consulta")
+        .setDescription("Escribe tu consulta")
+        .setRequired(true)
+    ),
+	new SlashCommandBuilder()
 	.setName('navidad')
 	.setDescription('Envía los mensajes de Navidad y Año Nuevo'),
 	new SlashCommandBuilder()
@@ -299,7 +307,49 @@ client.on('interactionCreate', async (interaction) => {
 
 
   //-----------------------------------------------------------
-  const rest = new REST({ version: '9' }).setToken(process.env.DISCORD_TOKEN);
+
+  const mistralClient = new Mistral({ apiKey: process.env.AGENT_API_KEY });
+
+// Manejar interacciones de slash commands
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isCommand()) return;
+
+  const { commandName } = interaction;
+
+  if (commandName === "mistral") {
+    const consulta = interaction.options.getString("consulta");
+
+    // Responder inicialmente para evitar tiempo de espera
+    await interaction.deferReply();
+
+    try {
+      // Llamar a la API de Mistral
+      const chatResponse = await mistralClient.chat.complete({
+        model: 'mistral-large-latest',
+        messages: [{ role: 'user', content: consulta }],
+      });
+
+      const respuesta = chatResponse.choices[0].message.content;
+
+      // Log para ver la respuesta de Mistral
+      console.log("📬 Respuesta de Mistral:", respuesta);
+
+      // Responder al usuario con el resultado de Mistral
+      await interaction.editReply({ content: respuesta });
+    } catch (error) {
+      console.error("❌ Error procesando la consulta:", error.message);
+      console.error("Detalles del error:", JSON.stringify(error, null, 2));
+
+      // Mejorar el mensaje de error con detalles
+      await interaction.editReply({
+        content: `Hubo un error al procesar tu consulta. Detalles: \`${error.message}\`. Por favor, intenta más tarde.`,
+      });
+    }
+  }
+});
+
+  //-------------------------------------------------------------------------
+  const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
   
   client.once('ready', async () => { 
 	console.log(`¡El bot está listo como ${client.user.tag}!`);
