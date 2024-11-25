@@ -205,6 +205,26 @@ const video1 = {
 
 const commands = [
 	new SlashCommandBuilder()
+    .setName("combate")
+    .setDescription("Reta a otro jugador a un combate por turnos.")
+    .addUserOption(option =>
+      option.setName("oponente")
+        .setDescription("Menciona al jugador que deseas retar.")
+        .setRequired(true)
+    ),
+  new SlashCommandBuilder()
+    .setName("si")
+    .setDescription("Acepta el desafío."),
+  new SlashCommandBuilder()
+    .setName("no")
+    .setDescription("Rechaza el desafío."),
+	new SlashCommandBuilder()
+    .setName("carrera")
+    .setDescription("Inicia una carrera de emoticones."),
+  new SlashCommandBuilder()
+    .setName("participar")
+    .setDescription("Únete a la carrera activa."),
+	new SlashCommandBuilder()
     .setName("mistral")
     .setDescription("Haz una pregunta a Mistral")
     .addStringOption(option =>
@@ -269,6 +289,388 @@ const commands = [
 		  .setRequired(true))
 	  
   ];
+  //----------------------------------------------------------------------------------------------
+  //JUEGOS
+  // Emojis y variables de la carrera
+const EMOJIS = ["🐒", "🐟", "🐢", "🐇", "🐌", "🐘", "🐕", "🐅", "🐿️", "🦉"];
+let carreraActiva = false;
+let participantes = [];
+let posiciones = [];
+const longitudPista = 20;
+
+// Registrar comandos
+client.once("ready", async () => {
+  console.log(`✅ Bot iniciado como ${client.user.tag}`);
+  const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
+
+  try {
+    console.log("🔄 Registrando comandos...");
+    await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
+    console.log("✅ Comandos registrados correctamente.");
+  } catch (error) {
+    console.error("❌ Error al registrar los comandos:", error);
+  }
+});
+
+// Generar pista
+const generarPista = (longitud, posiciones, emojis) => {
+  return posiciones
+    .map((pos, i) => {
+      const espacios = " ".repeat(pos);
+      const restantes = Math.max(0, longitud - pos - 1); // Evita valores negativos
+      const linea = `${espacios}${emojis[i]}${" ".repeat(restantes)}|`;
+      return linea;
+    })
+    .join("\n");
+};
+
+// Avance aleatorio
+const avanzar = () => Math.floor(Math.random() * 3);
+
+// Manejar comandos
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isCommand()) return;
+
+  const { commandName } = interaction;
+
+  if (commandName === "carrera") {
+    if (carreraActiva) {
+      await interaction.reply("⚠️ Ya hay una carrera en curso.");
+      return;
+    }
+
+    carreraActiva = true;
+    participantes = [];
+    posiciones = [];
+
+    const mensajeInicial = await interaction.reply({
+      content: "🏁 ¡Carrera iniciada! Escribe `/participar` para unirte. La carrera comienza en 15 segundos.",
+      fetchReply: true,
+    });
+
+    setTimeout(async () => {
+      if (participantes.length < 2) {
+        carreraActiva = false;
+        await interaction.channel.send("❌ No hay suficientes jugadores (mínimo 2) para iniciar la carrera.");
+        return;
+      }
+
+      const emojis = participantes.map((p) => p.emoji);
+      let mensajeCarrera = `🎮 Participantes: ${emojis.join(", ")}\n🏁 ¡La carrera comienza ahora!`;
+      let ganadores = [];
+
+      // Actualizar mensaje de la carrera
+      while (ganadores.length === 0) {
+        // Mover a los jugadores
+        for (let i = 0; i < posiciones.length; i++) {
+          posiciones[i] += avanzar();
+          if (posiciones[i] >= longitudPista && !ganadores.includes(participantes[i])) {
+            ganadores.push(participantes[i]);
+          }
+        }
+
+        // Generar pista y actualizar mensaje
+        const pista = generarPista(longitudPista, posiciones, participantes.map((p) => p.emoji));
+        mensajeCarrera = `🎮 Participantes: ${emojis.join(", ")}\n\`\`\`\n${pista}\n\`\`\``;
+        await mensajeInicial.edit(mensajeCarrera);
+
+        await new Promise((resolve) => setTimeout(resolve, 2000)); // Pausa entre actualizaciones
+      }
+
+      // Anunciar al ganador
+      const mensajeGanador = ganadores
+        .map((g) => `<@${g.id}> (${g.emoji})`)
+        .join(", ");
+      await interaction.channel.send(
+        `🎉 ¡Felicidades ${mensajeGanador}! Has ganado, eres un verdadero ninja 🥷`
+      );
+      carreraActiva = false;
+    }, 15000);
+  }
+
+  if (commandName === "participar") {
+    if (!carreraActiva) {
+      await interaction.reply("⚠️ No hay una carrera activa. Usa `/carrera` para iniciar una.");
+      return;
+    }
+
+    const userId = interaction.user.id;
+    if (participantes.some((p) => p.id === userId)) {
+      await interaction.reply("⚠️ Ya estás inscrito en esta carrera.");
+      return;
+    }
+
+    if (participantes.length >= EMOJIS.length) {
+      await interaction.reply("⚠️ No hay más espacios disponibles en esta carrera.");
+      return;
+    }
+
+    const emoji = EMOJIS[participantes.length];
+    participantes.push({ id: userId, emoji });
+    posiciones.push(0);
+
+    await interaction.reply(`🎉 Te has unido a la carrera con el emoji ${emoji}`);
+  }
+});
+
+//juegos de combate 
+
+// Variables de combate
+let combateActivo = false;
+let jugadores = [];
+let turnoActual = 0;
+
+// Registrar los comandos
+client.once("ready", async () => {
+  console.log(`✅ Bot iniciado como ${client.user.tag}`);
+  const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
+
+  try {
+    console.log("🔄 Registrando comandos...");
+    await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: commands });
+    console.log("✅ Comandos registrados correctamente.");
+  } catch (error) {
+    console.error("❌ Error al registrar los comandos:", error);
+  }
+});
+
+// Generar estadísticas iniciales
+const generarEstadisticas = () => ({
+  vida: 100,
+  energia: 100,
+  defensa: 0,
+});
+
+
+// Mensajes personalizados
+const frasesGanador = [
+  "¡Eres un verdadero ninja, {nombre}! 🥷",
+  "El camino del ninja te pertenece, {nombre}. 🌟",
+  "La victoria es tuya, {nombre}. ¡Sigue adelante como un verdadero guerrero! 💪",
+  "¡{nombre}, tu astucia y fuerza son incomparables! 🎉",
+  "¡Impresionante, {nombre}! Eres un verdadero maestro de las artes ninja. 🥋",
+  "Con esta victoria, {nombre}, te has ganado el respeto de todos. 🔥",
+  "¡Así se juega un combate ninja, {nombre}! 🌟",
+  "La victoria de hoy se quedará en la historia, {nombre}. 🏆",
+  "¡Hoy se celebra la victoria de {nombre}! 🎯",
+  "Así es como se hace, {nombre}. ¡Eres un campeón! 💪",
+  "El clan SaK está orgulloso de tu victoria, {nombre}. 🐉",
+  "SaK te saluda, {nombre}, como un verdadero shinobi. 🌠",
+  "La victoria es el reflejo de tu entrenamiento, {nombre}. 🏯",
+  "SaK sabe que la victoria es solo el principio para {nombre}. 🔥",
+  "¡Tu valentía ha llevado a SaK a la cima, {nombre}! 🏅",
+  "Tu nombre será recordado en SaK por esta victoria, {nombre}. 🌟",
+  "SaK te celebra, {nombre}. La victoria es el reflejo de tu esfuerzo. 🌌",
+  "SaK está de fiesta gracias a tu victoria, {nombre}. 🎉",
+  "El espíritu de SaK vive en tu victoria, {nombre}. 🥋",
+];
+
+const frasesPerdedor = [
+  "Así es el camino ninja de SaK, {nombre}. Aprende de esta derrota. 🌀",
+  "Solo los fuertes perseveran, {nombre}. ¡Levántate y sigue luchando! 🌠",
+  "Cada derrota es una lección, {nombre}. El espíritu ninja nunca se rinde. 🔥",
+  "No te preocupes, {nombre}, los grandes ninjas también han caído alguna vez. 💪",
+  "{nombre}, la derrota es solo un peldaño más en tu camino ninja. 🏯",
+  "La derrota solo te hace más fuerte, {nombre}. No olvides nunca tu entrenamiento. 🏋️‍♂️",
+  "El camino ninja no es fácil, {nombre}, pero los más grandes siempre se levantan. 🌱",
+  "Hoy es el primer día de tu nueva victoria, {nombre}. 🌅",
+  "Levántate, {nombre}, el camino ninja te está esperando. 🌠",
+  "A veces la derrota nos enseña más que la victoria, {nombre}. 🔥",
+  "El clan SaK respalda a sus ninjas, {nombre}. Sigue luchando. 🐉",
+  "Tu derrota hoy, {nombre}, será el motor de tu victoria mañana. 🌞",
+  "Los grandes ninjas caen, pero nunca se rinden, {nombre}. ¡Levántate! 💪",
+  "SaK cree en ti, {nombre}. Cada caída es una oportunidad para levantarse. 🏯",
+  "¡Aún puedes! El clan SaK siempre estará contigo, {nombre}. 🌺",
+  "Cada derrota te acerca a ser más fuerte, {nombre}. Sigue adelante. 💥",
+  "Los ninjas de SaK no temen a la derrota, {nombre}. ¡El camino sigue! 🌌",
+  "SaK no abandona a sus guerreros, {nombre}. Vamos, ¡es hora de regresar más fuerte! 🔥",
+  "{nombre}, SaK cree en tu determinación. ¡La próxima victoria será tuya! 🌠",
+  "Levántate, {nombre}. El espíritu ninja de SaK te acompaña en cada paso. 🥷",
+];
+// Acción de combate
+const realizarAccion = async (accion, jugador, oponente, interaction) => {
+  let resultado = "";
+
+  switch (accion) {
+    case "curar":
+      if (jugador.energia >= 10) {
+        const curacion = Math.floor(Math.random() * 30) + 1;
+        jugador.vida = Math.min(jugador.vida + curacion, 100);
+        jugador.energia -= 10;
+        resultado = `🩹 ${jugador.nombre} se cura ${curacion} puntos de vida. Ahora tiene ${jugador.vida} de vida y ${jugador.energia} de energía.`;
+      } else {
+        resultado = `❌ ${jugador.nombre} no tiene suficiente energía para curarse. Energía restante: ${jugador.energia}.`;
+      }
+      break;
+
+    case "ataque":
+      let dañoBase = Math.floor(Math.random() * 17) + 8;
+      if (jugador.vida <= 25) {
+        dañoBase += Math.floor(Math.random() * 10) + 5; // Incremento de daño si la vida está baja
+      }
+      const dañoAtaque = dañoBase - oponente.defensa;
+      oponente.vida = Math.max(oponente.vida - Math.max(dañoAtaque, 0), 0);
+      oponente.defensa = 0; // La defensa se anula después de un turno
+      resultado = `⚔️ ${jugador.nombre} ataca e inflige ${Math.max(dañoAtaque, 0)} de daño. ${oponente.nombre} tiene ${oponente.vida} de vida restante. Energía restante: ${jugador.energia}.`;
+      break;
+
+    case "ataque_especial":
+      if (jugador.energia >= 60) {
+        let dañoEspecialBase = Math.floor(Math.random() * 56) + 1;
+        if (jugador.vida <= 25) {
+          dañoEspecialBase += Math.floor(Math.random() * 20) + 10; // Incremento de daño si la vida está baja
+        }
+        const dañoEspecial = dañoEspecialBase - oponente.defensa;
+        oponente.vida = Math.max(oponente.vida - Math.max(dañoEspecial, 0), 0);
+        oponente.defensa = 0;
+        jugador.energia -= 60;
+        resultado = `💥 ${jugador.nombre} usa un ataque especial e inflige ${Math.max(dañoEspecial, 0)} de daño. ${oponente.nombre} tiene ${oponente.vida} de vida restante. Energía restante: ${jugador.energia}.`;
+      } else {
+        resultado = `❌ ${jugador.nombre} no tiene suficiente energía para un ataque especial. Energía restante: ${jugador.energia}.`;
+      }
+      break;
+
+    case "defender":
+      if (jugador.energia >= 10) {
+        const defensa = Math.floor(Math.random() * 40) + 1;
+        jugador.defensa = defensa;
+        jugador.energia -= 10;
+        resultado = `🛡️ ${jugador.nombre} se prepara para defender y podrá absorber ${defensa} de daño en el próximo turno. Energía restante: ${jugador.energia}.`;
+      } else {
+        resultado = `❌ ${jugador.nombre} no tiene suficiente energía para defender. Energía restante: ${jugador.energia}.`;
+      }
+      break;
+
+    case "recargar":
+      const recarga = jugador.vida > 50
+        ? Math.floor(Math.random() * 30) + 1
+        : Math.floor(Math.random() * 200) + 1;
+      jugador.energia = Math.min(jugador.energia + recarga, 100);
+      resultado = `🔋 ${jugador.nombre} recarga ${recarga} puntos de energía. Ahora tiene ${jugador.energia} de energía.`;
+      break;
+
+    default:
+      resultado = "❌ Acción no válida.";
+  }
+
+  await interaction.update({
+    content: resultado,
+    components: [],
+  });
+
+  turnoActual = (turnoActual + 1) % 2;
+
+  if (jugadores.some((j) => j.vida <= 0)) {
+    const ganador = jugadores.find((j) => j.vida > 0);
+    const perdedor = jugadores.find((j) => j.vida <= 0);
+    const fraseGanador = frasesGanador[Math.floor(Math.random() * frasesGanador.length)].replace("{nombre}", ganador.nombre);
+    const frasePerdedor = frasesPerdedor[Math.floor(Math.random() * frasesPerdedor.length)].replace("{nombre}", perdedor.nombre);
+
+    await interaction.followUp(`🎉 ${fraseGanador}`);
+    await interaction.followUp(`😞 ${frasePerdedor}`);
+
+    combateActivo = false;
+    jugadores = [];
+    return;
+  }
+
+  await interaction.followUp(`🎮 Turno de ${jugadores[turnoActual].nombre}.`);
+  mostrarOpciones(interaction.channel, jugadores[turnoActual]);
+};
+
+// Mostrar las opciones de acciones
+const mostrarOpciones = async (channel, jugador) => {
+  const botones = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("curar")
+      .setLabel("1️⃣ Curar")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId("ataque")
+      .setLabel("2️⃣ Ataque")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId("ataque_especial")
+      .setLabel("3️⃣ Ataque Especial")
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId("defender")
+      .setLabel("4️⃣ Defender")
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId("recargar")
+      .setLabel("5️⃣ Recargar")
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  await channel.send({
+    content: `🎮 Turno de ${jugador.nombre}. ¿Qué deseas hacer?`,
+    components: [botones],
+  });
+};
+
+// Manejar comandos
+client.on("interactionCreate", async (interaction) => {
+  if (interaction.isCommand()) {
+    const { commandName } = interaction;
+
+    if (commandName === "combate") {
+      if (combateActivo) {
+        await interaction.reply("⚠️ Ya hay un combate en curso. Espera a que termine.");
+        return;
+      }
+
+      const oponente = interaction.options.getUser("oponente");
+      if (oponente.bot || oponente.id === interaction.user.id) {
+        await interaction.reply("⚠️ No puedes retar a este usuario.");
+        return;
+      }
+
+      combateActivo = true;
+      jugadores = [
+        { id: interaction.user.id, nombre: interaction.user.username, ...generarEstadisticas() },
+        { id: oponente.id, nombre: oponente.username, ...generarEstadisticas() },
+      ];
+      turnoActual = 0;
+
+      await interaction.reply(`⚔️ ${interaction.user.username} ha retado a ${oponente.username} a un combate. Usa \`/si\` para aceptar o \`/no\` para rechazar.`);
+    }
+
+    if (commandName === "si") {
+      if (!combateActivo || jugadores[1].id !== interaction.user.id) {
+        await interaction.reply("⚠️ No tienes un desafío pendiente para aceptar.");
+        return;
+      }
+
+      await interaction.reply(`🎮 El combate ha comenzado entre ${jugadores[0].nombre} y ${jugadores[1].nombre}. Turno de ${jugadores[0].nombre}.`);
+      mostrarOpciones(interaction.channel, jugadores[0]);
+    }
+
+    if (commandName === "no") {
+      if (!combateActivo || jugadores[1].id !== interaction.user.id) {
+        await interaction.reply("⚠️ No tienes un desafío pendiente para rechazar.");
+        return;
+      }
+
+      await interaction.reply("😞 ¡Desgracia sobre ti, sobre tu casa y sobre tu vaca! El desafío ha sido rechazado.");
+      combateActivo = false;
+      jugadores = [];
+    }
+  }
+
+  if (interaction.isButton()) {
+    const jugador = jugadores[turnoActual];
+    if (interaction.user.id !== jugador.id) {
+      await interaction.reply({ content: "⚠️ No es tu turno.", ephemeral: true });
+      return;
+    }
+
+    const oponente = jugadores[(turnoActual + 1) % 2];
+    realizarAccion(interaction.customId, jugador, oponente, interaction);
+  }
+});
+
+// Iniciar el bot
   //----------------------------------------------------------------------------------
 // Registrar los comandos en Discord
 client.once("ready", async () => {
@@ -2479,7 +2881,7 @@ client.on("messageCreate", (message) => {
 			const help2 = new EmbedBuilder()
 			.setTitle('Comandos de /')
 
-			.setDescription("solo le agrege el comando de /buscaranime + nombre del anime te da su info y link en animeflv otra cosa si buscas por ejemplo one piece te dara todo lo relacionado a el pero si buscan One Piece Film Z les dara en especifico la pelicula PD:no me agrada Boa nadie que patea perritos es muy bueno\ngenshinarmas = te da las 3 mejores armas para un personaje de genshin si solo 3 porque creanme que las armas estan mas pesadas que los artefactos si usan el comando de artefactos se daran cuenta de lo que digo y las armas facil son el triple \ngenshinartefactos te dan los mejores artefactos de un personaje genshin\ncambiarentradas = le da la bienvenida y despedida a las personas que quieras en el canal seleccionado \ncodigoszzz = te da los codigos actuales del zzz (nap) \ncodigos genshin = ya deberias saberlo no?\ncodigos_wuwa= encerio necesitas saberlo?\ncodigoshonkai = si de ambos honkai....\nmistral= las clasicas IAS  ")
+			.setDescription("solo le agrege el comando de /buscaranime + nombre del anime te da su info y link en animeflv otra cosa si buscas por ejemplo one piece te dara todo lo relacionado a el pero si buscan One Piece Film Z les dara en especifico la pelicula PD:no me agrada Boa nadie que patea perritos es muy bueno\ngenshinarmas = te da las 3 mejores armas para un personaje de genshin si solo 3 porque creanme que las armas estan mas pesadas que los artefactos si usan el comando de artefactos se daran cuenta de lo que digo y las armas facil son el triple \ngenshinartefactos te dan los mejores artefactos de un personaje genshin\ncambiarentradas = le da la bienvenida y despedida a las personas que quieras en el canal seleccionado \ncodigoszzz = te da los codigos actuales del zzz (nap) \ncodigos genshin = ya deberias saberlo no?\ncodigos_wuwa= encerio necesitas saberlo?\ncodigoshonkai = si de ambos honkai....\nmistral= las clasicas IAS\ncombate=retas a alguien a un combate\ncarrera= ya es obvio no?  ")
 			.setFooter({
 				text: "El nombre completo de las hermanas yuima son dark-yuima-jojan y susa-yuima-jojan"
 			})
