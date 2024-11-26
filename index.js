@@ -418,6 +418,7 @@ client.on("interactionCreate", async (interaction) => {
 let combateActivo = false;
 let jugadores = [];
 let turnoActual = 0;
+let combateTimeout; // Temporizador de inactividad
 
 // Registrar los comandos
 client.once("ready", async () => {
@@ -488,92 +489,104 @@ const frasesPerdedor = [
 
 // Acción de combate
 const realizarAccion = async (accion, jugador, oponente, interaction) => {
-  let resultado = "";
-
-  switch (accion) {
-    case "curar":
-      if (jugador.energia >= 10) {
-        const curacion = Math.floor(Math.random() * 30) + 1;
-        jugador.vida = Math.min(jugador.vida + curacion, 100);
-        jugador.energia -= 10;
-        resultado = `🩹 ${jugador.nombre} se cura ${curacion} puntos de vida. Ahora tiene ${jugador.vida} de vida y ${jugador.energia} de energía.`;
-      } else {
-        resultado = `❌ ${jugador.nombre} no tiene suficiente energía para curarse. Energía restante: ${jugador.energia}.`;
-      }
-      break;
-
-    case "ataque":
-      let dañoBase = Math.floor(Math.random() * 17) + 8;
-      if (jugador.vida <= 25) {
-        dañoBase += Math.floor(Math.random() * 10) + 5; // Incremento de daño si la vida está baja
-      }
-      const dañoAtaque = dañoBase - oponente.defensa;
-      oponente.vida = Math.max(oponente.vida - Math.max(dañoAtaque, 0), 0);
-      oponente.defensa = 0; // La defensa se anula después de un turno
-      resultado = `⚔️ ${jugador.nombre} ataca e inflige ${Math.max(dañoAtaque, 0)} de daño. ${oponente.nombre} tiene ${oponente.vida} de vida restante. Energía restante: ${jugador.energia}.`;
-      break;
-
-    case "ataque_especial":
-      if (jugador.energia >= 60) {
-        let dañoEspecialBase = Math.floor(Math.random() * 56) + 1;
-        if (jugador.vida <= 25) {
-          dañoEspecialBase += Math.floor(Math.random() * 20) + 10; // Incremento de daño si la vida está baja
-        }
-        const dañoEspecial = dañoEspecialBase - oponente.defensa;
-        oponente.vida = Math.max(oponente.vida - Math.max(dañoEspecial, 0), 0);
-        oponente.defensa = 0;
-        jugador.energia -= 60;
-        resultado = `💥 ${jugador.nombre} usa un ataque especial e inflige ${Math.max(dañoEspecial, 0)} de daño. ${oponente.nombre} tiene ${oponente.vida} de vida restante. Energía restante: ${jugador.energia}.`;
-      } else {
-        resultado = `❌ ${jugador.nombre} no tiene suficiente energía para un ataque especial. Energía restante: ${jugador.energia}.`;
-      }
-      break;
-
-    case "defender":
-      if (jugador.energia >= 10) {
-        const defensa = Math.floor(Math.random() * 40) + 1;
-        jugador.defensa = defensa;
-        jugador.energia -= 10;
-        resultado = `🛡️ ${jugador.nombre} se prepara para defender y podrá absorber ${defensa} de daño en el próximo turno. Energía restante: ${jugador.energia}.`;
-      } else {
-        resultado = `❌ ${jugador.nombre} no tiene suficiente energía para defender. Energía restante: ${jugador.energia}.`;
-      }
-      break;
-
-    case "recargar":
-      const recarga = Math.floor(Math.random() * 80) + 1;  // Recarga entre 1 y 80
-      jugador.energia = Math.min(jugador.energia + recarga, 100);  // No puede superar 100
-      resultado = `🔋 ${jugador.nombre} recarga ${recarga} puntos de energía. Ahora tiene ${jugador.energia} de energía.`;
-      break;
-
-    default:
-      resultado = "❌ Acción no válida.";
-  }
-
-  await interaction.update({
-    content: resultado,
-    components: [],
-  });
-
-  turnoActual = (turnoActual + 1) % 2;
-
-  if (jugadores[0].vida <= 0 || jugadores[1].vida <= 0) {
-    const ganador = jugadores[0].vida > 0 ? jugadores[0] : jugadores[1];
-    const perdedor = jugadores[0].vida <= 0 ? jugadores[0] : jugadores[1];
-
-    const mensajeGanador = frasesGanador[Math.floor(Math.random() * frasesGanador.length)].replace("{nombre}", ganador.nombre);
-    const mensajePerdedor = frasesPerdedor[Math.floor(Math.random() * frasesPerdedor.length)].replace("{nombre}", perdedor.nombre);
-
-    await interaction.channel.send(`🎉 ¡${ganador.nombre} ha ganado el combate! ${mensajeGanador}`);
-    await interaction.channel.send(`😞 ${perdedor.nombre}, mejor suerte la próxima vez. ${mensajePerdedor}`);
-
-    combateActivo = false;
-    jugadores = [];
-  } else {
-    await interaction.channel.send(`🎮 Es el turno de ${jugadores[turnoActual].nombre}.`);
-    mostrarOpciones(interaction.channel, jugadores[turnoActual]);
-  }
-};
+	let resultado = "";
+  
+	switch (accion) {
+	  case "curar":
+		if (jugador.energia >= 10) {
+		  const curacion = Math.floor(Math.random() * 30) + 1;
+		  jugador.vida = Math.min(jugador.vida + curacion, 100);
+		  jugador.energia -= 10;
+		  resultado = `🩹 ${jugador.nombre} se cura ${curacion} puntos de vida. Ahora tiene ${jugador.vida} de vida y ${jugador.energia} de energía.`;
+		} else {
+		  resultado = `❌ ${jugador.nombre} no tiene suficiente energía para curarse. Energía restante: ${jugador.energia}.`;
+		}
+		break;
+  
+	  case "ataque":
+		let dañoBase = Math.floor(Math.random() * 17) + 8;
+		if (jugador.vida <= 25) {
+		  dañoBase += Math.floor(Math.random() * 10) + 5; // Incremento de daño si la vida está baja
+		}
+		const dañoAtaque = dañoBase - oponente.defensa;
+		oponente.vida = Math.max(oponente.vida - Math.max(dañoAtaque, 0), 0);
+		oponente.defensa = 0; // La defensa se anula después de un turno
+		resultado = `⚔️ ${jugador.nombre} ataca e inflige ${Math.max(dañoAtaque, 0)} de daño. ${oponente.nombre} tiene ${oponente.vida} de vida restante. Energía restante: ${jugador.energia}.`;
+		break;
+  
+	  case "ataque_especial":
+		if (jugador.energia >= 60) {
+		  let dañoEspecialBase = Math.floor(Math.random() * 56) + 1;
+		  if (jugador.vida <= 25) {
+			dañoEspecialBase += Math.floor(Math.random() * 20) + 10; // Incremento de daño si la vida está baja
+		  }
+		  const dañoEspecial = dañoEspecialBase - oponente.defensa;
+		  oponente.vida = Math.max(oponente.vida - Math.max(dañoEspecial, 0), 0);
+		  oponente.defensa = 0;
+		  jugador.energia -= 60;
+		  resultado = `💥 ${jugador.nombre} usa un ataque especial e inflige ${Math.max(dañoEspecial, 0)} de daño. ${oponente.nombre} tiene ${oponente.vida} de vida restante. Energía restante: ${jugador.energia}.`;
+		} else {
+		  resultado = `❌ ${jugador.nombre} no tiene suficiente energía para un ataque especial. Energía restante: ${jugador.energia}.`;
+		}
+		break;
+  
+	  case "defender":
+		if (jugador.energia >= 10) {
+		  const defensa = Math.floor(Math.random() * 40) + 1;
+		  jugador.defensa = defensa;
+		  jugador.energia -= 10;
+		  resultado = `🛡️ ${jugador.nombre} se prepara para defender y podrá absorber ${defensa} de daño en el próximo turno. Energía restante: ${jugador.energia}.`;
+		} else {
+		  resultado = `❌ ${jugador.nombre} no tiene suficiente energía para defender. Energía restante: ${jugador.energia}.`;
+		}
+		break;
+  
+	  case "recargar":
+		const recarga = jugador.vida > 50
+		  ? Math.floor(Math.random() * 30) + 1
+		  : Math.floor(Math.random() * 200) + 1;
+		jugador.energia = Math.min(jugador.energia + recarga, 100);
+		resultado = `🔋 ${jugador.nombre} recarga ${recarga} puntos de energía. Ahora tiene ${jugador.energia} de energía.`;
+		break;
+  
+	  default:
+		resultado = "❌ Acción no válida.";
+	}
+  
+	// Reiniciar temporizador después de cada acción
+	clearTimeout(combateTimeout);
+	combateTimeout = setTimeout(() => {
+	  interaction.channel.send("⏳ ¡El combate ha sido cancelado por inactividad! ⚠️");
+	  combateActivo = false;
+	  jugadores = [];
+	}, 60000); // 60 segundos de inactividad
+  
+	await interaction.update({
+	  content: resultado,
+	  components: [],
+	});
+  
+	turnoActual = (turnoActual + 1) % 2;
+  
+	// Comprobar si el combate ha terminado
+	if (jugadores[0].vida <= 0 || jugadores[1].vida <= 0) {
+	  const ganador = jugadores[0].vida > 0 ? jugadores[0] : jugadores[1];
+	  const perdedor = jugadores[0].vida <= 0 ? jugadores[0] : jugadores[1];
+  
+	  const mensajeGanador = frasesGanador[Math.floor(Math.random() * frasesGanador.length)].replace("{nombre}", ganador.nombre);
+	  const mensajePerdedor = frasesPerdedor[Math.floor(Math.random() * frasesPerdedor.length)].replace("{nombre}", perdedor.nombre);
+  
+	  await interaction.channel.send(`🎉 ¡${ganador.nombre} ha ganado el combate! ${mensajeGanador}`);
+	  await interaction.channel.send(`😞 ${perdedor.nombre}, mejor suerte la próxima vez. ${mensajePerdedor}`);
+  
+	  combateActivo = false;
+	  jugadores = [];
+	} else {
+	  await interaction.channel.send(`🎮 Es el turno de ${jugadores[turnoActual].nombre}.`);
+	  mostrarOpciones(interaction.channel, jugadores[turnoActual]);
+	}
+  };
+  
 
 // Mostrar opciones para el jugador
 const mostrarOpciones = (channel, jugador) => {
@@ -594,10 +607,6 @@ const mostrarOpciones = (channel, jugador) => {
       .setCustomId("ataque_especial")
       .setLabel("Ataque Especial")
       .setStyle(ButtonStyle.Danger),
-    new ButtonBuilder()
-      .setCustomId("recargar")
-      .setLabel("Recargar Energía")
-      .setStyle(ButtonStyle.Secondary),
   ];
 
   channel.send({
@@ -605,6 +614,78 @@ const mostrarOpciones = (channel, jugador) => {
     components: [new ActionRowBuilder().addComponents(botones)],
   });
 };
+
+// Manejar comandos
+client.on("interactionCreate", async (interaction) => {
+  if (interaction.isCommand()) {
+    const { commandName } = interaction;
+
+    if (commandName === "combate") {
+      if (combateActivo) {
+        await interaction.reply("⚠️ Ya hay un combate en curso. Espera a que termine.");
+        return;
+      }
+
+      const oponente = interaction.options.getUser("oponente");
+      if (oponente.bot || oponente.id === interaction.user.id) {
+        await interaction.reply("⚠️ No puedes retar a este usuario.");
+        return;
+      }
+
+      combateActivo = true;
+      jugadores = [
+        { id: interaction.user.id, nombre: interaction.user.username, ...generarEstadisticas() },
+        { id: oponente.id, nombre: oponente.username, ...generarEstadisticas() },
+      ];
+      turnoActual = 0;
+
+      await interaction.reply(`⚔️ ${interaction.user.username} ha retado a ${oponente.username} a un combate. Usa \`/si\` para aceptar o \`/no\` para rechazar.`);
+
+      // Configurar el temporizador de inactividad
+      combateTimeout = setTimeout(() => {
+        interaction.followUp("⏳ ¡El combate ha sido cancelado por inactividad! ⚠️");
+        combateActivo = false;
+        jugadores = [];
+      }, 60000); // 60 segundos
+    }
+
+    if (commandName === "si") {
+      if (!combateActivo || jugadores[1].id !== interaction.user.id) {
+        await interaction.reply("⚠️ No tienes un desafío pendiente para aceptar.");
+        return;
+      }
+
+      clearTimeout(combateTimeout); // Cancelar temporizador si se acepta el combate
+
+      await interaction.reply(`🎮 El combate ha comenzado entre ${jugadores[0].nombre} y ${jugadores[1].nombre}. Turno de ${jugadores[0].nombre}.`);
+      mostrarOpciones(interaction.channel, jugadores[0]);
+    }
+
+    if (commandName === "no") {
+      if (!combateActivo || jugadores[1].id !== interaction.user.id) {
+        await interaction.reply("⚠️ No tienes un desafío pendiente para rechazar.");
+        return;
+      }
+
+      clearTimeout(combateTimeout); // Cancelar temporizador si se rechaza el combate
+
+      await interaction.reply("😞 ¡Desgracia sobre ti, sobre tu casa y sobre tu vaca! El desafío ha sido rechazado.");
+      combateActivo = false;
+      jugadores = [];
+    }
+  }
+
+  if (interaction.isButton()) {
+    const jugador = jugadores[turnoActual];
+    if (interaction.user.id !== jugador.id) {
+      await interaction.reply({ content: "⚠️ No es tu turno.", ephemeral: true });
+      return;
+    }
+
+    const oponente = jugadores[(turnoActual + 1) % 2];
+    realizarAccion(interaction.customId, jugador, oponente, interaction);
+  }
+});
 
 
 // Iniciar el bot
