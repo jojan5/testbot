@@ -414,11 +414,11 @@ client.on("interactionCreate", async (interaction) => {
 });
 
 //juegos de combate 
-
 // Variables de combate
 let combateActivo = false;
 let jugadores = [];
 let turnoActual = 0;
+let combateTimeout; // Temporizador de inactividad
 
 // Registrar los comandos
 client.once("ready", async () => {
@@ -440,7 +440,6 @@ const generarEstadisticas = () => ({
   energia: 100,
   defensa: 0,
 });
-
 
 // Mensajes personalizados
 const frasesGanador = [
@@ -487,6 +486,7 @@ const frasesPerdedor = [
   "{nombre}, SaK cree en tu determinación. ¡La próxima victoria será tuya! 🌠",
   "Levántate, {nombre}. El espíritu ninja de SaK te acompaña en cada paso. 🥷",
 ];
+
 // Acción de combate
 const realizarAccion = async (accion, jugador, oponente, interaction) => {
   let resultado = "";
@@ -553,6 +553,14 @@ const realizarAccion = async (accion, jugador, oponente, interaction) => {
       resultado = "❌ Acción no válida.";
   }
 
+  // Reiniciar temporizador después de cada acción
+  clearTimeout(combateTimeout);
+  combateTimeout = setTimeout(() => {
+    interaction.channel.send("⏳ ¡El combate ha sido cancelado por inactividad! ⚠️");
+    combateActivo = false;
+    jugadores = [];
+  }, 60000); // 60 segundos de inactividad
+
   await interaction.update({
     content: resultado,
     components: [],
@@ -560,52 +568,46 @@ const realizarAccion = async (accion, jugador, oponente, interaction) => {
 
   turnoActual = (turnoActual + 1) % 2;
 
-  if (jugadores.some((j) => j.vida <= 0)) {
-    const ganador = jugadores.find((j) => j.vida > 0);
-    const perdedor = jugadores.find((j) => j.vida <= 0);
-    const fraseGanador = frasesGanador[Math.floor(Math.random() * frasesGanador.length)].replace("{nombre}", ganador.nombre);
-    const frasePerdedor = frasesPerdedor[Math.floor(Math.random() * frasesPerdedor.length)].replace("{nombre}", perdedor.nombre);
+  // Comprobar si el combate ha terminado
+  if (jugadores[0].vida <= 0 || jugadores[1].vida <= 0) {
+    const ganador = jugadores[0].vida > 0 ? jugadores[0] : jugadores[1];
+    const perdedor = jugadores[0].vida <= 0 ? jugadores[0] : jugadores[1];
 
-    await interaction.followUp(`🎉 ${fraseGanador}`);
-    await interaction.followUp(`😞 ${frasePerdedor}`);
+    await interaction.channel.send(`🎉 ¡${ganador.nombre} ha ganado el combate! ${frasesGanador[Math.floor(Math.random() * frasesGanador.length)]}`);
+    await interaction.channel.send(`😞 ${perdedor.nombre}, mejor suerte la próxima vez. ${frasesPerdedor[Math.floor(Math.random() * frasesPerdedor.length)]}`);
 
     combateActivo = false;
     jugadores = [];
-    return;
+  } else {
+    await interaction.channel.send(`🎮 Es el turno de ${jugadores[turnoActual].nombre}.`);
+    mostrarOpciones(interaction.channel, jugadores[turnoActual]);
   }
-
-  await interaction.followUp(`🎮 Turno de ${jugadores[turnoActual].nombre}.`);
-  mostrarOpciones(interaction.channel, jugadores[turnoActual]);
 };
 
-// Mostrar las opciones de acciones
-const mostrarOpciones = async (channel, jugador) => {
-  const botones = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("curar")
-      .setLabel("1️⃣ Curar")
-      .setStyle(ButtonStyle.Primary),
+// Mostrar opciones para el jugador
+const mostrarOpciones = (channel, jugador) => {
+  const botones = [
     new ButtonBuilder()
       .setCustomId("ataque")
-      .setLabel("2️⃣ Ataque")
+      .setLabel("Atacar")
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId("ataque_especial")
-      .setLabel("3️⃣ Ataque Especial")
-      .setStyle(ButtonStyle.Danger),
-    new ButtonBuilder()
       .setCustomId("defender")
-      .setLabel("4️⃣ Defender")
+      .setLabel("Defender")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId("curar")
+      .setLabel("Curarse")
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
-      .setCustomId("recargar")
-      .setLabel("5️⃣ Recargar")
-      .setStyle(ButtonStyle.Secondary),
-  );
+      .setCustomId("ataque_especial")
+      .setLabel("Ataque Especial")
+      .setStyle(ButtonStyle.Danger),
+  ];
 
-  await channel.send({
-    content: `🎮 Turno de ${jugador.nombre}. ¿Qué deseas hacer?`,
-    components: [botones],
+  channel.send({
+    content: `${jugador.nombre}, es tu turno. Elige una acción:`,
+    components: [new ActionRowBuilder().addComponents(botones)],
   });
 };
 
@@ -634,6 +636,13 @@ client.on("interactionCreate", async (interaction) => {
       turnoActual = 0;
 
       await interaction.reply(`⚔️ ${interaction.user.username} ha retado a ${oponente.username} a un combate. Usa \`/si\` para aceptar o \`/no\` para rechazar.`);
+
+      // Configurar el temporizador de inactividad
+      combateTimeout = setTimeout(() => {
+        interaction.followUp("⏳ ¡El combate ha sido cancelado por inactividad! ⚠️");
+        combateActivo = false;
+        jugadores = [];
+      }, 60000); // 60 segundos
     }
 
     if (commandName === "si") {
@@ -641,6 +650,8 @@ client.on("interactionCreate", async (interaction) => {
         await interaction.reply("⚠️ No tienes un desafío pendiente para aceptar.");
         return;
       }
+
+      clearTimeout(combateTimeout); // Cancelar temporizador si se acepta el combate
 
       await interaction.reply(`🎮 El combate ha comenzado entre ${jugadores[0].nombre} y ${jugadores[1].nombre}. Turno de ${jugadores[0].nombre}.`);
       mostrarOpciones(interaction.channel, jugadores[0]);
@@ -651,6 +662,8 @@ client.on("interactionCreate", async (interaction) => {
         await interaction.reply("⚠️ No tienes un desafío pendiente para rechazar.");
         return;
       }
+
+      clearTimeout(combateTimeout); // Cancelar temporizador si se rechaza el combate
 
       await interaction.reply("😞 ¡Desgracia sobre ti, sobre tu casa y sobre tu vaca! El desafío ha sido rechazado.");
       combateActivo = false;
@@ -669,6 +682,7 @@ client.on("interactionCreate", async (interaction) => {
     realizarAccion(interaction.customId, jugador, oponente, interaction);
   }
 });
+
 
 // Iniciar el bot
   //----------------------------------------------------------------------------------
