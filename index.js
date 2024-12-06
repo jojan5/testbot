@@ -2416,7 +2416,7 @@ client.on("messageCreate", (message) => {
 			text: ":["
 		})
 		.setColor('#808080')
-		.setImage('https://www.icegif.com/wp-content/uploads/sad-anime-icegif-1.gif')
+		.setImage('https://www.icegif.com/wp-content/uploads/2024/09/sad-icegif.gif')
 
 	const cry5 = new EmbedBuilder()
 		.setTitle(" sad ")
@@ -2492,7 +2492,7 @@ client.on("messageCreate", (message) => {
 			text: ":["
 		})
 		.setColor('#508080')
-		.setImage('https://www.icegif.com/wp-content/uploads/sad-anime-icegif.gif')
+		.setImage('https://media.tenor.com/ZgbfJDDS9yQAAAAM/anime-depressed.gif')
 
 	const sad2 = new EmbedBuilder()
 		.setTitle(" sad ")
@@ -2501,7 +2501,7 @@ client.on("messageCreate", (message) => {
 			text: ":["
 		})
 		.setColor('#508080')
-		.setImage('https://www.icegif.com/wp-content/uploads/sad-anime-icegif.gifhttps://media4.giphy.com/media/P53TSsopKicrm/200w.gif?cid=6c09b952qcrkfv2kv7n7bpsi47zywrqs9il655nwsug2amax&rid=200w.gif&ct=g')
+		.setImage('https://media.tenor.com/jotyiHEoUGUAAAAM/anime.gif')
 
 	const sad3 = new EmbedBuilder()
 		.setTitle(" sad ")
