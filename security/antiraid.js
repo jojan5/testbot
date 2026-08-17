@@ -39,6 +39,7 @@ const DEFAULTS = {
 	msgWindowMs: 6000, // ...dentro de esta ventana => spam
 	duplicateThreshold: 3, // mismo texto repetido
 	mentionLimit: 6, // menciones en un solo mensaje
+	everyoneMinDays: 30, // días que hay que llevar para poder usar @everyone (0 = sin filtro)
 	timeoutMinutes: 10, // castigo por spam
 	blockInvites: true,
 
@@ -410,10 +411,32 @@ async function onMessageCreate(message) {
 	let motivo = null;
 	let aBorrar = [];
 
+	// --- 0. @everyone / @here de un miembro demasiado reciente ---
+	// El patrón clásico de estafa: una cuenta nueva pega @everyone con imágenes
+	// y ni la ráfaga ni los repetidos lo pillan, porque es un único mensaje.
+	// mentions.everyone vale para @everyone y @here, y solo es true si el ping
+	// se llegó a enviar de verdad (es decir, si el autor tenía el permiso).
+	if (cfg.everyoneMinDays > 0 && message.mentions.everyone) {
+		const diasCuenta = (ahora - member.user.createdTimestamp) / 864e5;
+		const diasServidor = member.joinedTimestamp
+			? (ahora - member.joinedTimestamp) / 864e5
+			: Infinity; // sin dato fiable, no lo usamos en contra
+
+		if (diasCuenta < cfg.everyoneMinDays || diasServidor < cfg.everyoneMinDays) {
+			const cual =
+				diasCuenta < diasServidor
+					? `su cuenta tiene ${diasCuenta.toFixed(1)} días`
+					: `lleva ${diasServidor.toFixed(1)} días en el servidor`;
+
+			motivo = `Usó @everyone/@here pero ${cual} (mínimo exigido: ${cfg.everyoneMinDays} días)`;
+			aBorrar = [message];
+		}
+	}
+
 	// --- 1. Menciones masivas ---
 	const menciones =
 		message.mentions.users.size + message.mentions.roles.size + (message.mentions.everyone ? 1 : 0);
-	if (menciones > cfg.mentionLimit) {
+	if (!motivo && menciones > cfg.mentionLimit) {
 		motivo = `Menciones masivas (${menciones} en un mensaje, límite ${cfg.mentionLimit})`;
 		aBorrar = [message];
 	}
@@ -532,6 +555,7 @@ function estadoEmbed(guild, cfg) {
 					`Ráfaga: **${cfg.msgThreshold}** msgs en **${Math.round(cfg.msgWindowMs / 1000)}s**\n` +
 					`Repetidos: **${cfg.duplicateThreshold}**\n` +
 					`Menciones: **${cfg.mentionLimit}**\n` +
+					`@everyone: **${cfg.everyoneMinDays > 0 ? `${cfg.everyoneMinDays} días de antigüedad` : 'libre'}**\n` +
 					`Castigo: **${cfg.timeoutMinutes}** min\n` +
 					`Invitaciones: **${cfg.blockInvites ? 'bloqueadas' : 'permitidas'}**`,
 				inline: true,
@@ -624,6 +648,13 @@ async function buildAuditEmbed(guild) {
 	if (guild.mfaLevel === 0) {
 		problemas.push('El servidor no exige **2FA a los moderadores**. Si le roban la cuenta a un mod, se acabó.');
 	}
+	if (guild.roles?.everyone?.permissions.has(PermissionFlagsBits.MentionEveryone)) {
+		problemas.push(
+			'El rol **@everyone** puede mencionar a todos: cualquier miembro puede hacer `@everyone`. ' +
+				`Ahora mismo lo freno para quien lleve menos de ${cfg.everyoneMinDays} días, pero lo suyo es ` +
+				'quitar ese permiso en Ajustes del servidor → Roles.',
+		);
+	}
 	if (!cfg.enabled) {
 		problemas.push('⚠️ La protección está **desactivada** (`*seguridad on` para encenderla).');
 	}
@@ -669,6 +700,7 @@ async function buildAuditEmbed(guild) {
 					`Cuentas nuevas: **${cfg.minAccountAgeDays}d** → ${cfg.newAccountAction}\n` +
 					`Spam: **${cfg.msgThreshold}** msgs / **${Math.round(cfg.msgWindowMs / 1000)}s**, ` +
 					`repetidos **${cfg.duplicateThreshold}**, menciones **${cfg.mentionLimit}**\n` +
+					`@everyone: **${cfg.everyoneMinDays > 0 ? `solo con ${cfg.everyoneMinDays}+ días` : 'libre para todos'}**\n` +
 					`Castigo: **${cfg.timeoutMinutes}** min · Invitaciones: **${cfg.blockInvites ? 'bloqueadas' : 'permitidas'}**`,
 				inline: false,
 			},
@@ -698,6 +730,7 @@ const AYUDA = [
 	'`spam <mensajes> <segundos>` — umbral de ráfaga',
 	'`repetidos <n>` — cuántos mensajes iguales se toleran',
 	'`menciones <n>` — menciones máximas por mensaje',
+	'`everyone <dias>` — días de antigüedad para poder usar @everyone (0 lo permite a todos)',
 	'`castigo <minutos>` — duración del timeout por spam',
 	'`invitaciones on|off` — borrar links discord.gg',
 	'`exento @rol` — añade o quita un rol de la lista de exentos',
@@ -812,6 +845,17 @@ async function onCommand(message) {
 			return guardarYResponder(`📣 Máximo **${n}** menciones por mensaje.`);
 		}
 
+		case 'everyone': {
+			const dias = numero(args[0], 0, 365);
+			if (dias === null) return message.reply(`Uso: \`${PREFIX}seguridad everyone 30\` (0 lo permite a todos)`);
+			cfg.everyoneMinDays = dias;
+			return guardarYResponder(
+				dias === 0
+					? '📣 Cualquiera puede usar **@everyone**.'
+					: `📣 Solo quien lleve **${dias}** días podrá usar **@everyone**.`,
+			);
+		}
+
 		case 'castigo': {
 			const minutos = numero(args[0], 1, 40320);
 			if (minutos === null) return message.reply(`Uso: \`${PREFIX}seguridad castigo 10\``);
@@ -881,15 +925,111 @@ function limpiar() {
 // Definición del slash command; index.js la mete en su array de comandos.
 const slashCommand = new SlashCommandBuilder()
 	.setName('seguridad')
-	.setDescription('Auditoría de seguridad: permisos, ajustes y actividad anti-raid del servidor.')
+	.setDescription('Protección anti-raid y anti-spam del servidor.')
 	.setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
 	.setDMPermission(false)
-	.addBooleanOption((option) =>
-		option
-			.setName('publico')
-			.setDescription('Mostrar el informe a todo el canal (por defecto solo lo ves tú).')
-			.setRequired(false),
+	.addSubcommand((sub) =>
+		sub
+			.setName('auditoria')
+			.setDescription('Informe: permisos del bot, agujeros de configuración y actividad registrada.')
+			.addBooleanOption((o) =>
+				o
+					.setName('publico')
+					.setDescription('Mostrar el informe a todo el canal (por defecto solo lo ves tú).'),
+			),
+	)
+	.addSubcommand((sub) =>
+		sub
+			.setName('config')
+			.setDescription('Cambia los ajustes. Rellena solo lo que quieras modificar.')
+			.addIntegerOption((o) =>
+				o
+					.setName('dias_para_everyone')
+					.setDescription('Días que hay que llevar para poder usar @everyone (0 = permitir a todos).')
+					.setMinValue(0)
+					.setMaxValue(365),
+			)
+			.addIntegerOption((o) =>
+				o
+					.setName('edad_minima_cuenta')
+					.setDescription('Edad mínima de la cuenta al entrar, en días (0 = desactivar).')
+					.setMinValue(0)
+					.setMaxValue(365),
+			)
+			.addIntegerOption((o) =>
+				o
+					.setName('spam_mensajes')
+					.setDescription('Cuántos mensajes seguidos cuentan como ráfaga.')
+					.setMinValue(2)
+					.setMaxValue(50),
+			)
+			.addIntegerOption((o) =>
+				o
+					.setName('spam_segundos')
+					.setDescription('En cuántos segundos se miden esos mensajes.')
+					.setMinValue(1)
+					.setMaxValue(300),
+			)
+			.addIntegerOption((o) =>
+				o
+					.setName('mensajes_repetidos')
+					.setDescription('Cuántos mensajes idénticos se toleran.')
+					.setMinValue(2)
+					.setMaxValue(20),
+			)
+			.addIntegerOption((o) =>
+				o
+					.setName('menciones_maximas')
+					.setDescription('Menciones máximas permitidas en un solo mensaje.')
+					.setMinValue(1)
+					.setMaxValue(50),
+			)
+			.addIntegerOption((o) =>
+				o
+					.setName('castigo_minutos')
+					.setDescription('Duración del timeout que se aplica al spammer.')
+					.setMinValue(1)
+					.setMaxValue(40320),
+			)
+			.addIntegerOption((o) =>
+				o
+					.setName('raid_entradas')
+					.setDescription('Cuántas entradas seguidas se consideran un raid.')
+					.setMinValue(2)
+					.setMaxValue(100),
+			)
+			.addIntegerOption((o) =>
+				o
+					.setName('raid_segundos')
+					.setDescription('En cuántos segundos se miden esas entradas.')
+					.setMinValue(1)
+					.setMaxValue(600),
+			)
+			.addChannelOption((o) =>
+				o.setName('canal_log').setDescription('Canal donde reportar lo que se bloquee.'),
+			)
+			.addBooleanOption((o) =>
+				o.setName('bloquear_invitaciones').setDescription('Borrar los links discord.gg.'),
+			)
+			.addBooleanOption((o) =>
+				o.setName('activo').setDescription('Encender o apagar toda la protección.'),
+			),
 	);
+
+// Opción del slash -> clave de configuración, con cómo mostrar el valor aplicado
+const OPCIONES_CONFIG = [
+	['dias_para_everyone', 'everyoneMinDays', (v) => (v === 0 ? '@everyone libre para todos' : `${v} días para poder usar @everyone`)],
+	['edad_minima_cuenta', 'minAccountAgeDays', (v) => (v === 0 ? 'filtro de cuentas nuevas desactivado' : `cuentas de mínimo ${v} días`)],
+	['spam_mensajes', 'msgThreshold', (v) => `ráfaga a partir de ${v} mensajes`],
+	['spam_segundos', 'msgWindowMs', (v) => `ventana de ráfaga de ${v}s`, (v) => v * 1000],
+	['mensajes_repetidos', 'duplicateThreshold', (v) => `${v} mensajes idénticos tolerados`],
+	['menciones_maximas', 'mentionLimit', (v) => `máximo ${v} menciones por mensaje`],
+	['castigo_minutos', 'timeoutMinutes', (v) => `timeout de ${v} min`],
+	['raid_entradas', 'joinThreshold', (v) => `raid a partir de ${v} entradas`],
+	['raid_segundos', 'joinWindowMs', (v) => `ventana de raid de ${v}s`, (v) => v * 1000],
+	['bloquear_invitaciones', 'blockInvites', (v) => `invitaciones ${v ? 'bloqueadas' : 'permitidas'}`],
+	['activo', 'enabled', (v) => `protección ${v ? 'activada' : 'desactivada'}`],
+];
 
 async function onInteraction(interaction) {
 	if (!interaction.isChatInputCommand()) return;
@@ -902,6 +1042,48 @@ async function onInteraction(interaction) {
 		return interaction.reply({ content: '❌ Necesitas el permiso **Gestionar servidor**.', ephemeral: true });
 	}
 
+	const sub = interaction.options.getSubcommand();
+
+	// ---------- /seguridad config ----------
+	if (sub === 'config') {
+		const cfg = getGuildConfig(interaction.guild.id);
+		const cambios = [];
+
+		for (const [opcion, clave, describir, transformar] of OPCIONES_CONFIG) {
+			const valor =
+				typeof cfg[clave] === 'boolean'
+					? interaction.options.getBoolean(opcion)
+					: interaction.options.getInteger(opcion);
+			if (valor === null || valor === undefined) continue;
+
+			cfg[clave] = transformar ? transformar(valor) : valor;
+			cambios.push(describir(valor));
+		}
+
+		const canal = interaction.options.getChannel('canal_log');
+		if (canal) {
+			if (!canal.isTextBased?.()) {
+				return interaction.reply({ content: '❌ El canal de logs tiene que ser de texto.', ephemeral: true });
+			}
+			cfg.logChannelId = canal.id;
+			cambios.push(`logs en ${canal}`);
+		}
+
+		if (!cambios.length) {
+			return interaction.reply({
+				content: `No indicaste ningún ajuste. Usa \`/seguridad auditoria\` para ver cómo está todo, o rellena alguna opción de \`/seguridad config\`.`,
+				ephemeral: true,
+			});
+		}
+
+		saveConfig();
+		return interaction.reply({
+			content: `✅ Actualizado:\n${cambios.map((c) => `• ${c}`).join('\n')}`,
+			ephemeral: true,
+		});
+	}
+
+	// ---------- /seguridad auditoria ----------
 	const publico = interaction.options.getBoolean('publico') ?? false;
 	await interaction.deferReply({ ephemeral: !publico });
 

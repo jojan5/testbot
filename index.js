@@ -3623,6 +3623,7 @@ client.on("messageCreate", (message) => {
 			"🛡️ **Moderación** (necesitas *Gestionar servidor*):\n" +
 			"**seguridad** = ver y cambiar la protección anti-raid / anti-spam\n" +
 			"**seguridad ayuda** = todos los subcomandos (umbrales, castigos, roles exentos...)\n" +
+			"**seguridad everyone <días>** = antigüedad mínima para poder usar @everyone\n" +
 			"**seguridad cerrar** / **seguridad abrir** = cierra o abre el servidor a mano ante un raid"
 		)
 		.setFooter({
@@ -3666,9 +3667,13 @@ client.on("messageCreate", (message) => {
 			"**/selectgiveaswaychannel** = Selecciona un canal para juegos gratis\n"+
 			"**/playermarvel = muestra las estadisticas de una persona en marvel rivals\n"+
 			"\n" +
-			"🛡️ **/seguridad** = auditoría del servidor: revisa si al bot le faltan permisos, si el servidor "
-			+ "tiene la verificación y el 2FA flojos, y cuántos raids, spammers y mensajes se han frenado. "
-			+ "Solo lo ves tú salvo que uses la opción `publico`. Requiere *Gestionar servidor*."
+			"🛡️ **/seguridad auditoria** = informe del servidor: revisa si al bot le faltan permisos, si la "
+			+ "verificación, el 2FA o el permiso de @everyone están flojos, y cuántos raids, spammers y mensajes "
+			+ "se han frenado. Solo lo ves tú salvo que uses la opción `publico`.\n"
+			+ "🛡️ **/seguridad config** = cambia los ajustes sin salir de Discord. Entre ellos "
+			+ "`dias_para_everyone`: los días que hay que llevar para poder usar @everyone (30 por defecto), "
+			+ "que es lo que frena a las cuentas nuevas que entran a pegar estafas con @everyone.\n"
+			+ "Ambos requieren *Gestionar servidor*."
 
 
 		)
