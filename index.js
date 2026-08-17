@@ -83,6 +83,7 @@ function requireOpcional(ruta, exportado) {
 
 const handlePlayerMarvel = requireOpcional('./comandos/Player.js', 'handlePlayerMarvel');
 const handlePlayerFortnite = requireOpcional('./comandos/playerf', 'handlePlayerFortnite');
+const handlePlayerOverwatch = requireOpcional('./comandos/playerove', 'handlePlayerOverwatch');
 const { setChannel, getChannel } = require('./configGive');
 const { postFreeGames } = require("./comandos/giveaways");
 
@@ -378,6 +379,14 @@ client.on('ready', async () => {
 
 const commands = [
   antiraid.slashCommand, // /seguridad — auditoría anti-raid
+  new SlashCommandBuilder()
+    .setName("playeroverwatch")
+    .setDescription("Muestra las estadísticas de un jugador de Overwatch 2.")
+    .addStringOption(option =>
+      option.setName("battletag")
+        .setDescription("BattleTag del jugador, por ejemplo Jugador#1234")
+        .setRequired(true)
+    ),
   new SlashCommandBuilder()
     .setName("combate")
     .setDescription("Reta a otro jugador a un combate por turnos.")
@@ -992,6 +1001,17 @@ client.on('interactionCreate', async (interaction) => {
         });
     }
     await handlePlayerFortnite(interaction);
+}
+
+
+if (interaction.commandName === 'playeroverwatch') {
+    if (!handlePlayerOverwatch) {
+        return interaction.reply({
+            content: '⚠️ Las tarjetas de jugador no están disponibles: el módulo de imágenes (canvas) no se pudo cargar en el servidor.',
+            ephemeral: true,
+        });
+    }
+    await handlePlayerOverwatch(interaction);
 }
 
 
@@ -3702,6 +3722,8 @@ client.on("messageCreate", (message) => {
 			"**/Playerfornite** = te da las estadisticas y rango de un jugador de fortnite\n"+
 			"**/selectgiveaswaychannel** = Selecciona un canal para juegos gratis\n"+
 			"**/playermarvel = muestra las estadisticas de una persona en marvel rivals\n"+
+			"**/playeroverwatch** + BattleTag (Jugador#1234) = tarjeta de Overwatch 2 con tus rangos por rol, "
+			+ "winrate, KDA y los héroes que más juegas. El perfil tiene que estar en público.\n"+
 			"\n" +
 			"🛡️ **/seguridad auditoria** = informe del servidor: revisa si al bot le faltan permisos, si la "
 			+ "verificación, el 2FA o el permiso de @everyone están flojos, y cuántos raids, spammers y mensajes "
