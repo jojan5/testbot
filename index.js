@@ -5,6 +5,14 @@ var level = require('level').Level;
 const { REST } = require('@discordjs/rest');
 var db = new level('db');
 
+const { createCanvas, loadImage } = require('canvas');
+const { AttachmentBuilder } = require('discord.js');
+
+
+const MARVEL_API_KEY = process.env.MARVEL_RIVALS_API_KEY;
+
+
+
 function dbDel(key) {
     return new Promise((resolve, reject)=> {
         db.del(key, (err)=>{
@@ -28,6 +36,8 @@ function dbGet(key) {
 }
 
 //----------------------------------------------------------------
+
+//------------------------------------------------------------------
 const { Mistral } = require('@mistralai/mistralai');
 const cheerio = require('cheerio');
 //const { Queue } = require('bull');
@@ -38,8 +48,8 @@ const { Routes } = require("discord-api-types/v9");
 const { Client, Intents, Collection, GatewayIntentBits, Partials, PresenceManager, PermissionsBitField } = require("discord.js");
 //const { Player } = require("discord-player");
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, Events } = require('discord.js');
-const fs = require("node:fs");
-const path = require("node:path");
+
+
 const axios = require('axios');
 const { TWITCH_CHANNEL, CHANNEL_LINK_ADVERT } = require('./config/channel.config.js');
 const genshin = require("genshin-api")
@@ -56,9 +66,13 @@ const {  IntentsBitField } = require('discord.js');
 const { ApplicationCommandManager, ApplicationCommandType } = require('discord.js');
 const { handleGenshinArmas } = require('./comandos/armas');
 const { handleGenshinArtefactos } = require('./comandos/artefactos');
-
+const { handlePlayerMarvel } = require('./comandos/Player.js');
+const { handlePlayerFortnite } = require('./comandos/playerf');
+const { setChannel, getChannel } = require('./configGive');
+const { postFreeGames } = require("./comandos/giveaways");
 
 const exaAnimeScraper = require('exa-anime-scraper');
+
 
 
 
@@ -84,127 +98,257 @@ const client = new Client({
 	]
 	//  , partials :[User,Message.GuildMember, TrheadMember],
 })
-//-------------------------------------------------------------------------------
-client.once('ready', () => {
-	console.log(`Logged in as ${client.user.tag}`);
-  
-	const messagesToSend = [
-	  {
-		channelId: '544629721976012863',
-		guildId: '544629721976012827',
-		content: '@everyone Ahora estamos en diciembre, ¡festejen mortales la época de paz y verdadero amor!\nhttps://youtu.be/qD-W4m-R2U8?si=jdXH7moYpb50m7-t',
-		embed: new EmbedBuilder()
-		  .setColor('#FFFFFF') // Blanco
-		  .setTitle('🎄 ¡Festejo de diciembre! 🎄')
-		  .setDescription('Celebra con nosotros, ¡la época de paz y amor verdadero!')
-		  .setImage('https://img.youtube.com/vi/qD-W4m-R2U8/0.jpg'), // Imagen del video
-		date: new Date('2024-12-05T12:10:00'),
-	  },
-	  {
-		channelId: '544629721976012863',
-		guildId: '544629721976012827',
-		content: '@everyone Ahora estamos en diciembre, ¡festejen mortales la época de paz y verdadero amor!\nhttps://www.youtube.com/watch?v=WYDhQuJqiuo',
-		embed: new EmbedBuilder()
-		  .setColor('#00FF00') // Verde
-		  .setTitle('🎉 ¡Época de paz y amor! 🎉')
-		  .setDescription('Disfruta con nosotros en esta temporada.')
-		  .setImage('https://img.youtube.com/vi/WYDhQuJqiuo/0.jpg'), // Imagen del video
-		date: new Date('2024-12-05T12:10:00'),
-	  },
-	];
-  
-	messagesToSend.forEach((message) => {
-	  const timeUntilSend = message.date.getTime() - Date.now();
-	  if (timeUntilSend > 0) {
-		setTimeout(async () => {
-		  const channel = client.channels.cache.get(message.channelId);
-		  if (channel) {
-			await channel.send({
-			  content: message.content,
-			  embeds: [message.embed],
-			});
-		  } else {
-			console.error(`No se pudo encontrar el canal con ID ${message.channelId}`);
-		  }
-		}, timeUntilSend);
-	  }
-	});
+//-------------------------------------------------------------------------------// ==============================
+//  MENSAJES ESPECIALES NAVIDAD / AÑO NUEVO
+//  - Usa twitchConfig[guildId].welcomeChannelId como canal principal
+//  - Si no hay welcomeChannelId, usa announcementChannelId como respaldo
+//  - Se envía 1 vez por año por servidor (se guarda en twitch-config.json)
+// ==============================
+//----------------------------------------------------------------
+
+////////////////////////////////////////////////////////////////////
+
+client.once("ready", () => {
+const GIVE_CHANNEL_FILE = path.join(__dirname, "giveChannel.json");
+    console.log(`🤖 Bot listo como ${client.user.tag}`);
+
+    setInterval(async () => {
+
+        console.log("\n================ GIVEAWAY CHECK ================");
+
+        if (!fs.existsSync(GIVE_CHANNEL_FILE)) {
+            console.log("❌ No existe giveChannel.json");
+            return;
+        }
+
+        const data = JSON.parse(fs.readFileSync(GIVE_CHANNEL_FILE));
+
+        const guilds = Object.keys(data);
+
+        if (!guilds.length) {
+            console.log("❌ No hay canales configurados");
+            return;
+        }
+
+        for (const guildId of guilds) {
+
+            const channelId = data[guildId];
+
+            console.log(`🔎 Revisando guild ${guildId} → canal ${channelId}`);
+
+            await postFreeGames(client, guildId, channelId);
+        }
+
+    }, 1000 * 60 * 60 * 24); // cada 2 minutos//cada 24 hotas
+
+});
+////////////////////////////////////////////////////////////////////////
+//-----------------------------------------------------
+// Config: cada cuánto revisar (en ms)
+const SEASONAL_CHECK_INTERVAL = 60 * 1000; // 1 minuto
+//----------------------------------------------------------------
+const fs = require('fs');
+const path = require('path');
+
+client.commands = new Map();
+
+const commandFiles = fs
+  .readdirSync(path.join(__dirname, 'comandos'))
+  .filter(file => file.endsWith('.js'));
+
+for (const file of commandFiles) {
+  const command = require(`./comandos/${file}`);
+  client.commands.set(command.name, command);
+}
+
+//------------------------------------------------------------------
+// Datos de los videos
+const CHRISTMAS_VIDEO = {
+  videoUrl: 'https://youtu.be/qD-W4m-R2U8?si=jdXH7moYpb50m7-t',
+  videoId: 'qD-W4m-R2U8',
+  title: '🎄 ¡Feliz Navidad! 🎄',
+  description: '¡Disfruta de este video y celebra con nosotros la época de paz y amor verdadero!',
+  footer: 'Yey, es diciembre',
+};
+
+const NEWYEAR_VIDEO = {
+  videoUrl: 'https://youtu.be/ANP1V08rxrk',
+  videoId: 'ANP1V08rxrk', // ID del video nuevo
+  title: '🎉 ¡Feliz Año Nuevo! 🎉🥂',
+  description: '¡Mira este video y celebremos juntos el inicio de un nuevo año!',
+  footer: 'Yey, es enero',
+};
+
+// Día fijo sin importar el año
+const CHRISTMAS_DAY = { month: 12, day: 1 }; // 1 de diciembre
+const NEWYEAR_DAY = { month: 1, day: 1 };    // 1 de enero
+
+function isToday(month, day) {
+  const now = new Date();
+  const m = now.getMonth() + 1;
+  const d = now.getDate();
+  return m === month && d === day;
+}
+
+async function sendSeasonalMessageToGuild(guildId, type) {
+  const cfg = twitchConfig[guildId];
+  if (!cfg) return;
+
+  // Aseguramos subobjeto donde guardar los años enviados
+  if (!cfg.seasonalMessages) {
+    cfg.seasonalMessages = {};
+  }
+
+  const now = new Date();
+  const currentYear = now.getFullYear();
+
+  if (type === 'christmas') {
+    if (cfg.seasonalMessages.lastChristmasYear === currentYear) return; // ya enviado este año
+
+    const channelId =
+      cfg.welcomeChannelId ||
+      cfg.announcementChannelId;
+
+    if (!channelId) {
+      console.log(`[SEASONAL] Servidor ${guildId} no tiene welcomeChannelId ni announcementChannelId.`);
+      return;
+    }
+
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) {
+      console.log(`[SEASONAL] No estoy en el servidor ${guildId}.`);
+      return;
+    }
+
+    const channel = guild.channels.cache.get(channelId);
+    if (!channel) {
+      console.log(`[SEASONAL] El canal ${channelId} no existe en el servidor ${guildId}.`);
+      return;
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor('#FFFFFF')
+      .setTitle(CHRISTMAS_VIDEO.title)
+      .setDescription(CHRISTMAS_VIDEO.description)
+      .setURL(CHRISTMAS_VIDEO.videoUrl)
+      .setImage(`https://img.youtube.com/vi/${CHRISTMAS_VIDEO.videoId}/0.jpg`)
+      .setFooter({ text: CHRISTMAS_VIDEO.footer });
+
+    await channel.send({
+      content: '@everyone Ahora estamos en diciembre, ¡festejen mortales la época de paz y verdadero amor!',
+      embeds: [embed],
+    });
+
+    console.log(`[SEASONAL] Mensaje de Navidad enviado en servidor ${guildId}.`);
+    cfg.seasonalMessages.lastChristmasYear = currentYear;
+    saveConfig();
+  }
+
+  if (type === 'newyear') {
+    if (cfg.seasonalMessages.lastNewYearYear === currentYear) return; // ya enviado este año
+
+    const channelId =
+      cfg.welcomeChannelId ||
+      cfg.announcementChannelId;
+
+    if (!channelId) {
+      console.log(`[SEASONAL] Servidor ${guildId} no tiene welcomeChannelId ni announcementChannelId.`);
+      return;
+    }
+
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) {
+      console.log(`[SEASONAL] No estoy en el servidor ${guildId}.`);
+      return;
+    }
+
+    const channel = guild.channels.cache.get(channelId);
+    if (!channel) {
+      console.log(`[SEASONAL] El canal ${channelId} no existe en el servidor ${guildId}.`);
+      return;
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor('#00FF00')
+      .setTitle(NEWYEAR_VIDEO.title)
+      .setDescription(NEWYEAR_VIDEO.description)
+      .setURL(NEWYEAR_VIDEO.videoUrl)
+      .setImage(`https://img.youtube.com/vi/${NEWYEAR_VIDEO.videoId}/0.jpg`)
+      .setFooter({ text: NEWYEAR_VIDEO.footer });
+
+    await channel.send({
+      content: '@everyone ¡Y próspero Año Nuevo, mortales! 🥂',
+      embeds: [embed],
+    });
+
+    console.log(`[SEASONAL] Mensaje de Año Nuevo enviado en servidor ${guildId}.`);
+    cfg.seasonalMessages.lastNewYearYear = currentYear;
+    saveConfig();
+  }
+}
+
+// Bucle que revisa cada minuto si toca mandar mensaje de Navidad o Año Nuevo
+function startSeasonalMessagesScheduler() {
+  console.log('[SEASONAL] Iniciando comprobación de mensajes de Navidad / Año Nuevo.');
+
+  const loop = async () => {
+    try {
+      const now = new Date();
+      const guildIds = Object.keys(twitchConfig || {});
+
+      if (guildIds.length === 0) {
+        // Sin servidores configurados, no hacemos nada
+        return;
+      }
+
+      const isChristmasToday = isToday(CHRISTMAS_DAY.month, CHRISTMAS_DAY.day);
+      const isNewYearToday = isToday(NEWYEAR_DAY.month, NEWYEAR_DAY.day);
+
+      if (!isChristmasToday && !isNewYearToday) {
+        return; // Hoy no toca nada
+      }
+
+      for (const guildId of guildIds) {
+        if (isChristmasToday) {
+          await sendSeasonalMessageToGuild(guildId, 'christmas');
+        }
+        if (isNewYearToday) {
+          await sendSeasonalMessageToGuild(guildId, 'newyear');
+        }
+      }
+    } catch (error) {
+      console.error('[SEASONAL] Error en el bucle de mensajes estacionales:', error);
+    }
+  };
+
+  // Revisar cada minuto
+  setInterval(loop, SEASONAL_CHECK_INTERVAL);
+}
+
+// ==============================
+//  BOT LISTO → INICIAR TWITCH + MENSAJES ESTACIONALES
+// ==============================
+
+client.on('ready', async () => {
+  console.log(`${client.user.tag} ha sido lanzado, listo para ver los canales de Twitch y mandar mensajes de temporada.`);
+
+  // Arranca el ciclo de Twitch (ya lo tenías)
+  checkLiveStatus();
+
+  // Arranca el ciclo de Navidad/Año Nuevo
+  startSeasonalMessagesScheduler();
+
+  client.user.setPresence({
+    activities: [{ name: 'Espiándolos desde las sombras' }],
+    status: 'online',
   });
+});
 
 //---------------------------------------------------------------------------------------
-// Configuración de mensajes programados
-const video1 = {
-	videoUrl: 'https://youtu.be/qD-W4m-R2U8?si=jdXH7moYpb50m7-t',
-	videoId: 'qD-W4m-R2U8', // ID del video manualmente
-	channelId: '547945139717275670', // Nuevo ID del canal
-	guildId: '547945139268616192', // Nuevo ID del servidor
-	date: new Date('2024-12-01T13:05:00'), // Fecha y hora del mensaje (1 de diciembre a la 1:05 PM)
-  };
-  
-  const video2 = {
-	videoUrl: 'https://www.youtube.com/watch?v=WYDhQuJqiuo',
-	videoId: 'WYDhQuJqiuo', // ID del video manualmente
-	channelId: '547945139717275670', // Nuevo ID del canal
-	guildId: '547945139268616192', // Nuevo ID del servidor
-	date: new Date('2024-12-01T13:05:00'), // Fecha y hora del mensaje (1 de diciembre a la 1:05 PM)
-  };
-  
-  // Función para verificar si es momento de enviar los mensajes
-  function checkScheduledMessages() {
-	const now = new Date();
-	[video1, video2].forEach(async (item) => {
-	  if (now >= item.date && item.date.getTime() + 60000 > now.getTime()) {
-		try {
-		  const guild = client.guilds.cache.get(item.guildId);
-		  if (!guild) return console.error('Servidor no encontrado');
-		  
-		  const channel = guild.channels.cache.get(item.channelId);
-		  if (!channel) return console.error('Canal no encontrado');
-  
-		  // Crear los embeds para cada video
-		  let embed;
-		  if (item === video1) {
-			embed = new EmbedBuilder()
-			  .setColor('#FFFFFF') // Blanco
-			  .setTitle('¡Feliz Navidad! 🎄🎁')
-			  .setDescription('¡Disfruta de este video y celebra con nosotros!')
-			  .setURL(item.videoUrl)
-			  .setImage(`https://img.youtube.com/vi/${item.videoId}/0.jpg`) // Miniatura del video
-			  .setFooter({ text: 'Yey, es diciembre' });
-		  } else if (item === video2) {
-			embed = new EmbedBuilder()
-			  .setColor('#00FF00') // Verde
-			  .setTitle('¡Y próspero Año Nuevo! 🎉🥂')
-			  .setDescription('¡Mira este video y celebremos juntos!')
-			  .setURL(item.videoUrl)
-			  .setImage(`https://img.youtube.com/vi/${item.videoId}/0.jpg`) // Miniatura del video
-			  .setFooter({ text: 'Yey, es diciembre' });
-		  }
-  
-		  // Enviar el mensaje con mención @everyone
-		  await channel.send({ content: '@everyone', embeds: [embed] });
-		  console.log(`Mensaje enviado: ${item.videoUrl}`);
-		  
-		  // Elimina el mensaje de la lista una vez enviado
-		  [video1, video2].splice([video1, video2].indexOf(item), 1);
-		} catch (error) {
-		  console.error('Error al enviar mensaje:', error);
-		}
-	  }
-	});
-  }
-  
-  // Ejecutar la verificación cada minuto
-  setInterval(checkScheduledMessages, 60000);
-  
-  client.once('ready', () => {
-	console.log(`Conectado como ${client.user.tag}`);
-  });
-  
 //-----------------------------------------------------------------
 
 const commands = [
-	new SlashCommandBuilder()
+  new SlashCommandBuilder()
     .setName("combate")
     .setDescription("Reta a otro jugador a un combate por turnos.")
     .addUserOption(option =>
@@ -218,13 +362,13 @@ const commands = [
   new SlashCommandBuilder()
     .setName("no")
     .setDescription("Rechaza el desafío."),
-	new SlashCommandBuilder()
+  new SlashCommandBuilder()
     .setName("carrera")
     .setDescription("Inicia una carrera de emoticones."),
   new SlashCommandBuilder()
     .setName("participar")
     .setDescription("Únete a la carrera activa."),
-	new SlashCommandBuilder()
+  new SlashCommandBuilder()
     .setName("mistral")
     .setDescription("Haz una pregunta a Mistral")
     .addStringOption(option =>
@@ -232,10 +376,10 @@ const commands = [
         .setDescription("Escribe tu consulta")
         .setRequired(true)
     ),
-	new SlashCommandBuilder()
-	.setName('navidad')
-	.setDescription('Envía los mensajes de Navidad y Año Nuevo'),
-	new SlashCommandBuilder()
+  new SlashCommandBuilder()
+    .setName('navidad')
+    .setDescription('Envía los mensajes de Navidad y Año Nuevo'),
+  new SlashCommandBuilder()
     .setName('codigos_honkai')
     .setDescription('Obtén los últimos códigos de Honkai: Star Rail'),
   new SlashCommandBuilder()
@@ -247,48 +391,106 @@ const commands = [
   new SlashCommandBuilder()
     .setName('codigoszzz')
     .setDescription('Obtiene los códigos de Zenless Zone Zero (Nap)'),
+	//--------------
 
-	new SlashCommandBuilder()
-	  .setName('anime')
-	  .setDescription('Busca un anime en AnimeFLV.')
-	  .addStringOption(option => 
-		option.setName('nombre-anime')
-		  .setDescription('El nombre del anime que deseas buscar.')
-		  .setRequired(true)),
-	new SlashCommandBuilder()
-	  .setName('buscaranime')
-	  .setDescription('Searches for information about the anime buscaranime.')
-	  .addStringOption(option => 
-		option.setName('nombre-anime')
-		  .setDescription('El nombre del anime que deseas buscar.')
-		  .setRequired(true)),
-	
-		  new SlashCommandBuilder()
-		  .setName('genshinarmas')
-		  .setDescription('Obtiene información sobre las mejores armas del personaje que elijas lo toma de paimon.moe')
-		  .addStringOption(option =>
-			  option.setName('arma')
-				  .setDescription('Obtén las mejores armas del personaje que selecciones')
-				  .setRequired(true)),
-	  new SlashCommandBuilder()
-		  .setName('genshinartefactos')
-		  .setDescription('Obtiene información sobre los artefactos del personaje que elijas lo toma de paimon.moe')
-		  .addStringOption(option =>
-			  option.setName('artefacto')
-				  .setDescription('Obtén información sobre los artefactos del personaje seleccionado')
-				  .setRequired(true)),
-		  new SlashCommandBuilder()
-	  .setName('registrarglobal')
-	  .setDescription('Registra todos los comandos globalmente (para admins)'),
-	  new SlashCommandBuilder()
-	  .setName('cambiarentradas')
-	  .setDescription('seleccióna el nombre del canal de entradas en esta guild')
-	  .addChannelOption(option =>
-		option.setName('canal')
-		  .setDescription('Selecciona el canal de entradas y salidas')
-		  .setRequired(true))
-	  
-  ];
+    // en tu registro de comandos test chat gpt
+new SlashCommandBuilder()
+  .setName('setgiveawaychannel')
+  .setDescription('Configura el canal para los giveaways')
+  .addChannelOption(option =>
+    option
+      .setName('canal')
+      .setDescription('Selecciona el canal')
+      .setRequired(true)
+  )
+  .toJSON(),
+  //---------------------------------------------------------
+
+
+
+  new SlashCommandBuilder()
+    .setName('anime')
+    .setDescription('Busca un anime en AnimeFLV.')
+    .addStringOption(option => 
+      option.setName('nombre-anime')
+        .setDescription('El nombre del anime que deseas buscar.')
+        .setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('buscaranime')
+    .setDescription('Searches for information about the anime buscaranime.')
+    .addStringOption(option => 
+      option.setName('nombre-anime')
+        .setDescription('El nombre del anime que deseas buscar.')
+        .setRequired(true)),
+  
+  new SlashCommandBuilder()
+    .setName('genshinarmas')
+    .setDescription('Obtiene información sobre las mejores armas del personaje que elijas lo toma de paimon.moe')
+    .addStringOption(option =>
+      option.setName('arma')
+        .setDescription('Obtén las mejores armas del personaje que selecciones')
+        .setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('genshinartefactos')
+    .setDescription('Obtiene información sobre los artefactos del personaje que elijas lo toma de paimon.moe')
+    .addStringOption(option =>
+      option.setName('artefacto')
+        .setDescription('Obtén información sobre los artefactos del personaje seleccionado')
+        .setRequired(true)),
+
+new SlashCommandBuilder()
+  .setName('playermarvel')
+  .setDescription('Muestra perfil visual de Marvel Rivals')
+  .addStringOption(option =>
+    option.setName('username')
+      .setDescription('Nombre del jugador')
+      .setRequired(true)
+  ),
+
+new SlashCommandBuilder()
+  .setName('playerfortnite')
+  .setDescription('Muestra perfil visual de Fortnite')
+  .addStringOption(option =>
+    option.setName('username')
+      .setDescription('Nombre del jugador de Fortnite')
+      .setRequired(true)
+  ),
+
+  new SlashCommandBuilder()
+    .setName('registrarglobal')
+    .setDescription('Registra todos los comandos globalmente (para admins)'),
+  new SlashCommandBuilder()
+    .setName('cambiarentradas')
+    .setDescription('seleccióna el nombre del canal de entradas en esta guild')
+    .addChannelOption(option =>
+      option.setName('canal')
+        .setDescription('Selecciona el canal de entradas y salidas')
+        .setRequired(true)
+    ),
+
+  // 👇👇 COMANDOS DE TWITCH 👇👇
+
+  new SlashCommandBuilder()
+    .setName('selectchannel')
+    .setDescription('Selecciona el canal donde se anunciarán los directos de Twitch')
+    .addChannelOption(option =>
+      option.setName('canal')
+        .setDescription('Canal de texto donde se enviarán los anuncios de Twitch')
+        .setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
+    .setName('selecttwitchchannel')
+    .setDescription('Agrega un canal de Twitch a monitorear en este servidor')
+    .addStringOption(option =>
+      option.setName('login')
+        .setDescription('Nombre del canal de Twitch (login, sin https)')
+        .setRequired(true)
+    ),
+];
+  //------------------------------------------------------------------------
+
+
   //----------------------------------------------------------------------------------------------
   //JUEGOS
   // Emojis y variables de la carrera
@@ -411,6 +613,8 @@ client.on("interactionCreate", async (interaction) => {
 
     await interaction.reply(`🎉 Te has unido a la carrera con el emoji ${emoji}`);
   }
+
+  
 });
 
 //juegos de combate 
@@ -721,10 +925,43 @@ client.once('ready', async () => {
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isCommand()) return;
 
+
+	//-/////////////////////////////////////////////////////
+
+	if (interaction.commandName === 'setgiveawaychannel') {
+
+    const canal = interaction.options.getChannel('canal');
+
+    if (!canal) {
+        return interaction.reply({
+            content: "❌ No se pudo obtener el canal.",
+            ephemeral: true
+        });
+    }
+
+    console.log("Guild ID:", interaction.guildId);
+    console.log("Canal seleccionado:", canal.id);
+
+    setChannel(interaction.guildId, canal.id);
+
+    return interaction.reply({
+        content: `✅ Canal configurado: ${canal}`,
+        ephemeral: true
+    });
+}
+/////////////////////////////////////////////////////////////////////////
     if (interaction.commandName === 'genshinarmas') {
         await handleGenshinArmas(interaction);
     }
 
+	if (interaction.commandName === 'playerfortnite') {
+    await handlePlayerFortnite(interaction);
+}
+
+
+if (interaction.commandName === 'playermarvel') {
+   await handlePlayerMarvel(interaction);
+}
     if (interaction.commandName === 'genshinartefactos') {
         await handleGenshinArtefactos(interaction);
     }
@@ -958,8 +1195,28 @@ client.on("interactionCreate", async (interaction) => {
 	  }
 	}
   });
-  
+  //-------------------------------------------
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isChatInputCommand()) return;
 
+  console.log('\n==============================');
+  console.log('[INTERACTION]', interaction.commandName);
+
+  console.log('[DEBUG] Comandos disponibles:',
+    [...client.commands.keys()]
+  );
+
+  const command = client.commands.get(interaction.commandName);
+
+  if (!command) {
+    console.log('[ERROR] Comando NO encontrado en Map');
+    return;
+  }
+
+  console.log('[DEBUG] Ejecutando comando:', command.name);
+
+  await command.execute(interaction);
+});
 //------------------------------------------------------------------------------------------------------------------
 
 client.once('ready', async () => {
@@ -1159,7 +1416,8 @@ client.on('messageCreate', async (message) => {
 
 
 });
-
+//---------------------------------regis
+//-----------comandos registro
 //--------------------------------------------------------------------------------------------------
 async function registerCommands() {
 	const commands = [
@@ -1433,16 +1691,8 @@ if (command === 'qiqi') {
 
 // Crear la cola y definir la tarea (como en el ejemplo anterior)
 
-// En tu comando de Discord:
-client.on('interactionCreate', async interaction => {
-  if (!interaction.isCommand()) return;
 
-  if (interaction.commandName === 'mycommand') {
-    // Agregar una tarea a la cola
-    await queue.add('my-task', { data: 'Some data' });
-    await interaction.reply('Tarea en proceso');
-  }
-});
+
 
 //----------------
 
@@ -1491,145 +1741,383 @@ client.on('interactionCreate', async interaction => {
 */
   //----------------------------------------------------------------------------------------------------
 
-console.log('Nombre de los canales de twitch:', TWITCH_CHANNEL.length);
-//---------
+// ==============================
+//  CONFIGURACIÓN TWITCH
+// ==============================
 
-const channelID = process.env.CHANNEL_ID;
-let profileImg = [];
-let liveStatus = new Array(TWITCH_CHANNEL.length).fill(false);
+const CONFIG_FILE = './twitch-config.json';
 
-//-------------------------------------------------------------------------
+// twitchConfig: {
+//   [guildId]: {
+//     announcementChannelId: string,
+//     twitchChannels: Array<{ login: string, lastStreamId?: string } | string>
+//   }
+// }
+let twitchConfig = {};
 
-// Function to check if the channel is live
-async function checkLiveStatus() {
-	if (TWITCH_CHANNEL.length > 0) {
-		try {
-			const profileImages = [];
-			const channelData = [];
-
-			for (let i = 0; i < TWITCH_CHANNEL.length; i++) {
-				// Request to get the user profile image
-				const twitchUserResponse = await axios.get(
-					"https://api.twitch.tv/helix/users",
-					{
-						params: {
-							login: TWITCH_CHANNEL[i],
-						},
-						headers: {
-							Authorization: `Bearer ${await getTwitchAccessToken()}`,
-							'Client-ID': process.env.TWITCH_CLIENT_ID,
-						},
-					}
-				);
-
-				profileImg = twitchUserResponse.data.data[0].profile_image_url;
-				profileImages.push(profileImg);
-
-				// Request to get the channel data, if the channel isn't live, no data will be returned
-				const twitchChannelResponse = await axios.get(
-					"https://api.twitch.tv/helix/streams",
-					{
-						params: {
-							user_login: TWITCH_CHANNEL[i],
-						},
-						headers: {
-							Authorization: `Bearer ${await getTwitchAccessToken()}`,
-							'Client-ID': process.env.TWITCH_CLIENT_ID,
-						},
-					}
-				);
-
-				const { data } = twitchChannelResponse.data;
-				channelData.push(data);
-
-				if (data.length === 0) {
-					if (liveStatus[i]) {
-						console.log('La chaîne n\'est pas en direct pour le moment.')
-						liveStatus[i] = false;
-					}
-				} else {
-					if (!liveStatus[i]) {
-						const announcementChannel = client.channels.cache.get(channelID);
-						if (announcementChannel) {
-							const streamURL = `https://www.twitch.tv/${TWITCH_CHANNEL[i]}`;
-							const viewerToString = data[0].viewer_count.toString();
-							const screenImg = data[0].thumbnail_url.replace('{width}', '1920').replace('{height}', '1080');
-
-							const embed = new EmbedBuilder()
-								.setColor('#772ce8')
-								.setTitle(data[0].title)
-								.setURL(streamURL)
-								.setAuthor({ name: `${data[0].user_name} esta en vivo`, iconURL: profileImages[i] ? profileImages[i] : null, url: streamURL })
-								.addFields(
-									{ name: 'Categoria', value: data[0].game_name, inline: true },
-									{ name: 'Espectadores', value: viewerToString, inline: true },
-								)
-								.setImage(screenImg)
-								.setTimestamp()
-								.setFooter({ text: `Ven a verlo` });
-
-							announcementChannel.send({ embeds: [embed], content: '¡La transmisión está encendida, te esperamos!\n\n@everyone' });
-							liveStatus[i] = true;
-							console.log(`Anuncio enviado para la transmisión. ${data[0].user_name} !`);
-						} else {
-							console.error(`El canal con el ID. ${channelID} no se encuentra.`);
-						}
-					}
-				}
-			}
-		} catch (error) {
-			console.error('Error al comprobar el estado del canal Twitch:', error);
-		}
-
-		setTimeout(checkLiveStatus, 300000); // We call the function every 5 minutes to check if the channel is live
-	} else {
-		console.log('No hay ningún canal de Twitch para verificar, agréguelo en la configuración.');
-	}
-};
-
-
-//---------------------------------------------------------
-
-async function getTwitchAccessToken() {
-	const twitchAuthResponse = await axios.post(
-		`https://id.twitch.tv/oauth2/token?client_id=${process.env.TWITCH_CLIENT_ID}&client_secret=${process.env.TWITCH_CLIENT_SECRET}&grant_type=client_credentials`
-	);
-
-	return twitchAuthResponse.data.access_token;
+try {
+	const raw = fs.readFileSync(CONFIG_FILE, 'utf8');
+	twitchConfig = JSON.parse(raw);
+	console.log('Configuración Twitch cargada:', twitchConfig);
+} catch {
+	console.log('No se encontró twitch-config.json, se creará uno nuevo al guardar.');
+	twitchConfig = {};
 }
 
-//-------------------------------------------------------
-client.on('ready', async () => {
-	console.log(`${client.user.tag} ha sido lanzado, ¡listo para ver los canales de Twitch!`);
-	checkLiveStatus();
+// Guarda la configuración actual en disco
+function saveConfig() {
+	fs.writeFileSync(CONFIG_FILE, JSON.stringify(twitchConfig, null, 2));
+	console.log('Configuración Twitch guardada en twitch-config.json');
+}
 
+// ==============================
+//  LOG DE ERRORES DE TWITCH
+// ==============================
+
+function logTwitchError(contexto, error) {
+	console.error(`\n[TWITCH] Error en: ${contexto}`);
+
+	if (error.isAxiosError) {
+		const status = error.response?.status;
+		const statusText = error.response?.statusText;
+		const url = error.config?.url;
+		const method = error.config?.method?.toUpperCase();
+
+		console.error(`[TWITCH] Petición: ${method || 'GET'} ${url || 'URL desconocida'}`);
+
+		if (status) {
+			console.error(`[TWITCH] HTTP Status: ${status} ${statusText || ''}`);
+		} else {
+			console.error('[TWITCH] No se recibió respuesta HTTP (¿timeout, DNS, red?)');
+		}
+
+		if (error.response?.data) {
+			console.error('[TWITCH] Respuesta de Twitch (data):');
+			console.error(JSON.stringify(error.response.data, null, 2));
+		}
+
+		if (error.code) {
+			console.error(`[TWITCH] Código de error de Axios/Node: ${error.code}`);
+		}
+	} else {
+		console.error('[TWITCH] Error no Axios:', error);
+	}
+
+	console.error('[TWITCH] Fin del reporte de error.\n');
+}
+
+// ==============================
+//  COMPROBAR ESTADO DE CANALES TWITCH Y ANUNCIAR
+//  - Anuncia SOLO UNA VEZ por stream (usa stream.id y lastStreamId)
+//  - twitchChannels puede tener strings (formato viejo) u objetos { login, lastStreamId }
+// ==============================
+
+async function checkLiveStatus() {
+	console.log('\n[TWITCH] ===== Iniciando ciclo de comprobación =====');
+
+	let configChanged = false;
+
+	try {
+		// Si no hay servidores configurados, no llamamos a la API de Twitch
+		const guildIds = Object.keys(twitchConfig || {});
+		if (guildIds.length === 0) {
+			console.log('[TWITCH] No hay servidores configurados. Usa /selectchannel y /selecttwitchchannel.');
+			setTimeout(checkLiveStatus, 300000); // 5 minutos
+			return;
+		}
+
+		// Obtenemos UN solo token de Twitch por ciclo
+		const token = await getTwitchAccessToken();
+		const headers = {
+			Authorization: `Bearer ${token}`,
+			'Client-ID': process.env.TWITCH_CLIENT_ID,
+		};
+
+		// Recorremos cada servidor que tenga configuración
+		for (const [guildId, cfg] of Object.entries(twitchConfig)) {
+			const { announcementChannelId, twitchChannels } = cfg;
+
+			const loginsString = (twitchChannels && twitchChannels.length > 0)
+				? twitchChannels
+					.map((ch) => (typeof ch === 'string' ? ch : ch.login))
+					.join(', ')
+				: 'ninguno';
+
+			console.log(`[TWITCH] Servidor ${guildId} → canal anuncios: ${announcementChannelId}, canales Twitch: ${loginsString}`);
+
+			if (!announcementChannelId || !twitchChannels || twitchChannels.length === 0) {
+				continue;
+			}
+
+			const guild = client.guilds.cache.get(guildId);
+			if (!guild) {
+				console.log(`[TWITCH] No estoy en el servidor con ID ${guildId}, lo omito.`);
+				continue;
+			}
+
+			const announcementChannel = guild.channels.cache.get(announcementChannelId);
+			if (!announcementChannel) {
+				console.log(`[TWITCH] El canal de anuncios ${announcementChannelId} no existe en el servidor ${guildId}, lo omito.`);
+				continue;
+			}
+
+			// Opcional: pequeña protección de permisos para evitar Missing Access
+			const me = guild.members.me;
+			if (!me || !announcementChannel.viewable || !announcementChannel.permissionsFor(me)?.has(PermissionsBitField.Flags.SendMessages)) {
+				console.log(`[TWITCH] No tengo acceso o permisos para enviar mensajes en el canal ${announcementChannelId} en el servidor ${guildId}.`);
+				continue;
+			}
+
+			// Revisamos cada canal de Twitch configurado para ese servidor
+			for (let i = 0; i < twitchChannels.length; i++) {
+				const chanInfo = twitchChannels[i];
+
+				// Puede ser string (viejo) u objeto (nuevo)
+				const login = typeof chanInfo === 'string' ? chanInfo : chanInfo.login;
+				if (!login) continue;
+
+				console.log(`[TWITCH] Revisando canal Twitch "${login}" para servidor ${guildId}...`);
+
+				try {
+					// 1) Info del usuario de Twitch
+					const twitchUserResponse = await axios.get(
+						'https://api.twitch.tv/helix/users',
+						{ params: { login }, headers }
+					);
+
+					const userData = twitchUserResponse.data.data[0];
+
+					if (!userData) {
+						console.warn(`[TWITCH] No se encontró el usuario Twitch: ${login}`);
+						continue;
+					}
+
+					// 2) Estado del stream (en vivo o no)
+					const twitchChannelResponse = await axios.get(
+						'https://api.twitch.tv/helix/streams',
+						{ params: { user_id: userData.id }, headers }
+					);
+
+					const data = twitchChannelResponse.data.data; // array 0 o 1 elemento
+
+					// No está en vivo
+					if (!data || data.length === 0) {
+						console.log(`[TWITCH] ${login} NO está en directo en el servidor ${guildId}.`);
+
+						// Si ya teníamos objeto con lastStreamId, lo limpiamos
+						if (typeof chanInfo !== 'string' && chanInfo.lastStreamId) {
+							chanInfo.lastStreamId = null;
+							configChanged = true;
+						}
+						continue;
+					}
+
+					// Sí está en vivo
+					const stream = data[0];
+					const currentStreamId = stream.id;
+
+					// Aseguramos que sea objeto (normaliza formato viejo string → objeto)
+					let channelObj;
+					if (typeof chanInfo === 'string') {
+						channelObj = { login, lastStreamId: null };
+						twitchChannels[i] = channelObj;
+						cfg.twitchChannels = twitchChannels;
+						configChanged = true;
+					} else {
+						channelObj = chanInfo;
+					}
+
+					// Si el streamId es el mismo que ya anunciamos → NO repetimos anuncio
+					if (channelObj.lastStreamId === currentStreamId) {
+						console.log(`[TWITCH] ${login} sigue en directo con el mismo streamId, ya se anunció antes en este servidor.`);
+						continue;
+					}
+
+					console.log(`[TWITCH] ${login} está EN DIRECTO en el servidor ${guildId}, enviando anuncio (nuevo streamId: ${currentStreamId})...`);
+
+					const streamURL = `https://www.twitch.tv/${login}`;
+					const viewerToString = stream.viewer_count.toString();
+					const screenImg = stream.thumbnail_url
+						.replace('{width}', '1920')
+						.replace('{height}', '1080');
+
+					const embed = new EmbedBuilder()
+						.setColor('#772ce8')
+						.setTitle(stream.title || 'Stream en directo')
+						.setURL(streamURL)
+						.setAuthor({
+							name: `${stream.user_name} está en vivo`,
+							iconURL: userData.profile_image_url || null,
+							url: streamURL,
+						})
+						.addFields(
+							{
+								name: 'Categoria',
+								value: stream.game_name || 'Sin categoría',
+								inline: true,
+							},
+							{
+								name: 'Espectadores',
+								value: viewerToString,
+								inline: true,
+							},
+						)
+						.setImage(screenImg)
+						.setTimestamp()
+						.setFooter({ text: 'Ven a verlo' });
+
+					await announcementChannel.send({
+						embeds: [embed],
+						content: '¡La transmisión está encendida, te esperamos!\n\n@everyone',
+					});
+
+					// Guardamos este streamId para NO volver a anunciarlo en este servidor
+					channelObj.lastStreamId = currentStreamId;
+					configChanged = true;
+
+					console.log(`[TWITCH] Anuncio enviado para ${stream.user_name} en el servidor ${guildId}.`);
+				} catch (err) {
+					logTwitchError(`checkLiveStatus → guild ${guildId} / canal Twitch ${login}`, err);
+				}
+			}
+		}
+	} catch (error) {
+		logTwitchError('checkLiveStatus (bucle general)', error);
+	} finally {
+		if (configChanged) {
+			saveConfig();
+		}
+		console.log('[TWITCH] ===== Fin de ciclo. Programando siguiente comprobación =====\n');
+		setTimeout(checkLiveStatus, 300000); // 5 minutos
+	}
+}
+
+// ==============================
+//  TOKEN DE TWITCH
+// ==============================
+
+async function getTwitchAccessToken() {
+	try {
+		const twitchAuthResponse = await axios.post(
+			`https://id.twitch.tv/oauth2/token` +
+			`?client_id=${process.env.TWITCH_CLIENT_ID}` +
+			`&client_secret=${process.env.TWITCH_CLIENT_SECRET}` +
+			`&grant_type=client_credentials`
+		);
+
+		return twitchAuthResponse.data.access_token;
+	} catch (error) {
+		logTwitchError('getTwitchAccessToken (obteniendo token OAuth)', error);
+		console.error('[TWITCH] Revisa TWITCH_CLIENT_ID y TWITCH_CLIENT_SECRET en las variables de entorno.');
+		throw error;
+	}
+}
+
+// ==============================
+//  BOT LISTO → INICIAR MONITOREO
+// ==============================
+
+client.on('ready', async () => {
+	console.log(`${client.user.tag} ha sido lanzado, listo para ver los canales de Twitch.`);
+	checkLiveStatus(); // Arranca el ciclo
 	client.user.setPresence({
-		activities: [
-			{
-				name: 'Espiandolos desde las sombras',
-			},
-		],
+		activities: [{ name: 'Espiándolos desde las sombras' }],
 		status: 'online',
 	});
 });
 
+// ==============================
+//  SLASH COMMANDS RELACIONADOS
+// ==============================
 
-// Interaction command
-client.on('interactionCreate', (interaction) => {
+client.on('interactionCreate', async (interaction) => {
 	if (!interaction.isChatInputCommand()) return;
 
-	if (interaction.commandName === 'channel') {
-		interaction.reply(CHANNEL_LINK_ADVERT);
+	const { commandName } = interaction;
+
+	// /channel → tu comando original
+	if (commandName === 'channel') {
+		await interaction.reply(CHANNEL_LINK_ADVERT);
+		return;
+	}
+
+	// /selectchannel → define canal de anuncios en este servidor
+	if (commandName === 'selectchannel') {
+		const guildId = interaction.guildId;
+		const channel = interaction.options.getChannel('canal');
+
+		if (!channel || !channel.isTextBased()) {
+			return interaction.reply({
+				content: 'El canal debe ser un canal de texto.',
+				ephemeral: true,
+			});
+		}
+
+		if (!twitchConfig[guildId]) {
+			twitchConfig[guildId] = {
+				announcementChannelId: null,
+				twitchChannels: [],
+			};
+		}
+
+		twitchConfig[guildId].announcementChannelId = channel.id;
+		saveConfig();
+
+		return interaction.reply({
+			content: `Este será el canal de anuncios de Twitch para este servidor: ${channel}`,
+			ephemeral: true,
+		});
+	}
+
+	// /selecttwitchchannel → agrega canal de Twitch para este servidor
+	if (commandName === 'selecttwitchchannel') {
+		const guildId = interaction.guildId;
+		let login = interaction.options.getString('login');
+
+		if (!login) {
+			return interaction.reply({
+				content: 'Debes indicar el nombre (login) del canal de Twitch.',
+				ephemeral: true,
+			});
+		}
+
+		login = login.toLowerCase().trim();
+
+		if (!twitchConfig[guildId]) {
+			twitchConfig[guildId] = {
+				announcementChannelId: null,
+				twitchChannels: [],
+			};
+		}
+
+		const cfg = twitchConfig[guildId];
+
+		// Evitar duplicados (funciona con strings viejos u objetos nuevos)
+		const alreadyExists = cfg.twitchChannels.some((ch) =>
+			(typeof ch === 'string' ? ch === login : ch.login === login)
+		);
+
+		if (alreadyExists) {
+			return interaction.reply({
+				content: `El canal de Twitch **${login}** ya estaba registrado para este servidor.`,
+				ephemeral: true,
+			});
+		}
+
+		// Nuevo formato: objeto
+		cfg.twitchChannels.push({
+			login,
+			lastStreamId: null,
+		});
+
+		saveConfig();
+
+		return interaction.reply({
+			content: `Canal de Twitch **${login}** agregado para este servidor.`,
+			ephemeral: true,
+		});
 	}
 });
-
-
-
-
-
-
-
-
 
 //---------------------------------------------------------------------
 
@@ -1639,71 +2127,284 @@ ffmpeg_options = {
 	'options': '-vn',
 	"before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
 }
-const newUsers = [];
+// ==============================================================================
+
+//===aqui el codigo de entradas=====================================================================================
+// ==============================
+//  ENTRADAS / SALIDAS (WELCOME / BYE)
+//  - Bienvenida: GIFs por fecha (navidad / enero) + 6 default al azar
+//  - Despedida: GIFs por fecha (navidad / enero) + 6 default al azar
+//  - Usa twitchConfig[guildId].welcomeChannelId para recordar el canal
+// ==============================
+
+// ==============================
+//  GIFs DE BIENVENIDA
+// ==============================
+
+// 6 GIFS DEFAULT DE BIENVENIDA (sin fecha especial)
+const WELCOME_DEFAULT_GIFS = [
+	'https://cdn.discordapp.com/attachments/1135778462393700363/1174983874292486216/media_391849520865956371_1700205038.gif?ex=65699401&is=65571f01&hm=55556e98c863076472a2794717684affe804a8a133eab33ab2d94e87a6bfdee1&', // original
+	'https://media.discordapp.net/attachments/569009136734306304/1448423759412330537/Digen_video_1765401439255-ezgif.com-video-to-gif-converter.gif?ex=693b353e&is=6939e3be&hm=db18234159d9b8eda85eb9a3afdc810feed797f7c2e8e56fe97002e9be28c8b9&=&width=1000&height=550',
+	'https://cdn.discordapp.com/attachments/569009136734306304/1448426263843835954/Digen_video_1765402026880-ezgif.com-video-to-gif-converter.gif?ex=693b3793&is=6939e613&hm=53587085dc8e4ab5804816b89771a2930787e07c9bcf93ed995ef9169ee14793&',
+	'https://media.discordapp.net/attachments/569009136734306304/1448432718378438769/Digen_video_1765403590831-ezgif.com-video-to-gif-converter.gif?ex=693b3d96&is=6939ec16&hm=0c7e1554bcf27d516da9df09bf2e97f728c8a923f8850c199bc2fab500587b80&=&width=1000&height=550',
+	'https://media.discordapp.net/attachments/569009136734306304/1448435501232160829/Digen_video_1765404285594-ezgif.com-video-to-gif-converter.gif?ex=693b402e&is=6939eeae&hm=60d4774c2aa0d00326f950777b6360b2a6fc52a3dccb0b75d8bbcae6a8b4e15e&=&width=1000&height=550',
+	'https://media.discordapp.net/attachments/569009136734306304/1448437570705817630/Digen_video_1765404718605-ezgif.com-video-to-gif-converter.gif?ex=693b421b&is=6939f09b&hm=d0ec048f9860ec8d581090173ced83eb698ffa8bb643ae515b5abf25e482ea62&=&width=1000&height=550'
+];
+
+// GIF navideño (25 nov – 15 ene)
+const WELCOME_HOLIDAY_GIF =
+	'https://media.discordapp.net/attachments/569009136734306304/1448365914968952832/Digen_video_1765387539489_1.gif?ex=693aff5f&is=6939addf&hm=efe333d9af0dd7440b358cb89aa48d4d3a9c605c6aecba2d3694f6faf9917ca4&=&width=500&height=275';
+
+// GIF especial de enero (16 – 30 ene)
+const WELCOME_JAN_GIF =
+	'https://cdn.discordapp.com/attachments/569009136734306304/1448364132632887368/Digen_video_1765387136388.gif?ex=693afdb6&is=6939ac36&hm=b00c95d8bbc4518f92cbc1b55891d7f551f06e4193259478968c7751cdfbedfd&';
+
+
+// ==============================
+//  GIFs DE DESPEDIDA
+// ==============================
+
+// 6 GIFS DEFAULT DE DESPEDIDA (sin fecha especial)
+const FAREWELL_DEFAULT_GIFS = [
+	'https://cdn.discordapp.com/attachments/1135778462393700363/1176079397128781844/media_392958085897304853_1700469437.gif?ex=656d904a&is=655b1b4a&hm=a1da6767223541b93d7ccb41f3bef2fab682c543498eac906b5ed16d4d5e9b62&', // default original
+	'https://media.discordapp.net/attachments/569009136734306304/1448409798424002601/Digen_video_1765398162642.gif?ex=693b283e&is=6939d6be&hm=5612e6998489853c6de7f5abde6f041d5e2e0eef67ffde66432cc0c59d402896&=&width=500&height=275',
+	'https://cdn.discordapp.com/attachments/569009136734306304/1448411222839136499/Digen_video_1765398495455_1.gif?ex=693b2991&is=6939d811&hm=953c3b221c35002302dfca3e6aa3f16e08d98d93c5efe44965539262f600159e&',
+	'https://cdn.discordapp.com/attachments/569009136734306304/1448412538390970488/Digen_video_1765398812208.gif?ex=693b2acb&is=6939d94b&hm=259bd00137b75e6805d2a26aff045e900f9a825a2aef2e489001b42ff2f64808&',
+	'https://media.discordapp.net/attachments/569009136734306304/1448419883879763978/Digen_video_1765400513279.gif?ex=693b31a2&is=6939e022&hm=628e7eb624527f349c340a5aa35b42d7bb24263e13fb6f6654194dddc6bf18e0&=&width=500&height=281',
+	'https://media.discordapp.net/attachments/569009136734306304/1448420042369929369/Digen_video_1765400541647.gif?ex=693b31c8&is=6939e048&hm=0fbedff5914ad2dd8b9ee23828da620e40415407187f9c99ea92448091f3c46d&=&width=500&height=275'
+];
+
+// GIF navideño de despedida (25 nov – 15 ene)
+const FAREWELL_HOLIDAY_GIF =
+	'https://media.discordapp.net/attachments/569009136734306304/1448372469969846332/Digen_video_1765389212672.gif?ex=693b057a&is=6939b3fa&hm=aed68b86f087fe1dccf1a287f8735fc147be382615838a6c04e5d3ad5451a2c8&=&width=500&height=275';
+
+// GIF especial de enero para despedida (16 – 30 ene, por ejemplo)
+const FAREWELL_JAN_GIF =
+	'https://cdn.discordapp.com/attachments/569009136734306304/1448408496474423356/Digen_video_1765397629250.gif?ex=693b2707&is=6939d587&hm=0fb89f8bf4938893120f083b48927e3a3311b8236cbba025de473002f3d5765e&';
+
+
+// ==============================
+//  HELPERS
+// ==============================
+
+// newUsers guardará una Collection por servidor para agrupar mensajes
+const newUsers = {};
+
+// Función para elegir un elemento al azar de un array
+function getRandomFromArray(arr) {
+	return arr[Math.floor(Math.random() * arr.length)];
+}
 
 const RIR = new EmbedBuilder()
-
 	.setFooter({
-		text: "Bienvenido este es el mejor servidor del mundo disfruta tu estadia"
+		text: "Bienvenido este es el mejor servidor del mundo disfruta tu estadia",
 	})
 	.setColor('Random')
-	.setImage('https://cdn.discordapp.com/attachments/1135778462393700363/1174983874292486216/media_391849520865956371_1700205038.gif?ex=65699401&is=65571f01&hm=55556e98c863076472a2794717684affe804a8a133eab33ab2d94e87a6bfdee1&')
-
-
+	// imagen base, luego se reemplaza según fecha
+	.setImage(WELCOME_DEFAULT_GIFS[0]);
 
 const RIR1 = new EmbedBuilder()
-	.setDescription("Ha sido un placer tenerte con nosotros lamento tu partida")
+	.setDescription("Ha sido un placer tenerte con nosotros, lamento tu partida")
 	.setFooter({
-		text: "adios te extrañaremos"
+		text: "Adiós, te extrañaremos",
 	})
 	.setColor('#fc9787')
-	.setImage('https://cdn.discordapp.com/attachments/1135778462393700363/1176079397128781844/media_392958085897304853_1700469437.gif?ex=656d904a&is=655b1b4a&hm=a1da6767223541b93d7ccb41f3bef2fab682c543498eac906b5ed16d4d5e9b62&')
+	// imagen base, luego se reemplaza según fecha
+	.setImage(FAREWELL_DEFAULT_GIFS[0]);
 
-	client.on("guildMemberRemove", (member) => {
-		const guild = member.guild;
-		if (!newUsers[guild.id]) newUsers[guild.id] = new Discord.Collection();
-		newUsers[guild.id].set(member.id, member.user);
-	
-		if (typeof canalSeleccionadoId === "undefined") {
-			console.log("No hay un canal seleccionado para despedir miembros.");
-			return; // Salimos de la función si no está definido
-		}
-	
-		const canal = guild.channels.cache.get(canalSeleccionadoId);
-		if (canal) {
-			if (newUsers[guild.id].size > 0) {
-				const userlist = newUsers[guild.id].map(u => u.toString()).join(" ");
-				canal.send("Adios!\n" + userlist);
-				canal.send({ embeds: [RIR1] });
-				newUsers[guild.id].clear();
-			}
+// ==============================
+//  FUNCIONES PARA ELEGIR GIF SEGÚN LA FECHA
+// ==============================
+
+function getWelcomeGifForDate(date = new Date()) {
+	const month = date.getMonth() + 1; // 1–12
+	const day = date.getDate();        // 1–31
+
+	// 25 nov – 15 ene → GIF navideño
+	if ((month === 11 && day >= 25) || month === 12 || (month === 1 && day <= 15)) {
+		return WELCOME_HOLIDAY_GIF;
+	}
+
+	// 16 – 30 ene → GIF especial de enero
+	if (month === 1 && day >= 16 && day <= 30) {
+		return WELCOME_JAN_GIF;
+	}
+
+	// Resto del año → uno de los 6 GIF default al azar
+	return getRandomFromArray(WELCOME_DEFAULT_GIFS);
+}
+
+function getFarewellGifForDate(date = new Date()) {
+	const month = date.getMonth() + 1;
+	const day = date.getDate();
+
+	// 25 nov – 15 ene → GIF navideño de despedida
+	if ((month === 11 && day >= 25) || month === 12 || (month === 1 && day <= 15)) {
+		return FAREWELL_HOLIDAY_GIF;
+	}
+
+	// 16 – 30 ene → GIF especial de enero para despedida
+	if (month === 1 && day >= 16 && day <= 30) {
+		return FAREWELL_JAN_GIF;
+	}
+
+	// Resto del año → uno de los 6 GIF default al azar
+	return getRandomFromArray(FAREWELL_DEFAULT_GIFS);
+}
+
+
+// ==============================
+//  CANAL DE ENTRADAS POR SERVIDOR
+//  - Usa twitchConfig[guildId].welcomeChannelId
+//  - Solo crea canal si tiene permiso, si no, pide /cambiarentradas
+// ==============================
+
+async function getOrCreateWelcomeChannel(guild) {
+	const guildId = guild.id;
+
+	// Aseguramos estructura base en twitchConfig para este servidor
+	if (!twitchConfig[guildId]) {
+		twitchConfig[guildId] = {
+			announcementChannelId: null,
+			twitchChannels: [],
+			welcomeChannelId: null,
+		};
+	}
+
+	let welcomeChannelId = twitchConfig[guildId].welcomeChannelId;
+	let canal = null;
+
+	// 1) Si ya hay un canal guardado por /cambiarentradas, usamos ese
+	if (welcomeChannelId) {
+		canal = guild.channels.cache.get(welcomeChannelId);
+		if (canal && canal.isTextBased()) {
+			return canal;
 		} else {
-			console.log("El canal especificado no existe en este servidor.");
+			console.log(`[ENTRADAS] El canal guardado (${welcomeChannelId}) ya no existe o no es de texto en el servidor ${guildId}.`);
 		}
-	});
-	
-	client.on("guildMemberAdd", (member) => {
-		const guild = member.guild;
-		if (!newUsers[guild.id]) newUsers[guild.id] = new Discord.Collection();
-		newUsers[guild.id].set(member.id, member.user);
-	
-		if (typeof canalSeleccionadoId === "undefined") {
-			console.log("No hay un canal seleccionado para dar la bienvenida.");
-			return; // Salimos de la función si no está definido
+	}
+
+	// 2) Si no hay ID guardado, intentamos encontrar uno existente con nombres típicos
+	canal = guild.channels.cache.find(
+		(ch) =>
+			ch.isTextBased() &&
+			['entradas', 'welcome', 'bienvenidos', 'bienvenida', 'entradas-salidas'].includes(ch.name)
+	);
+
+	if (canal) {
+		console.log(`[ENTRADAS] Se usará el canal existente #${canal.name} en servidor ${guildId}.`);
+		twitchConfig[guildId].welcomeChannelId = canal.id;
+		saveConfig();
+		return canal;
+	}
+
+	// 3) Si no hay ninguno y el bot NO tiene permisos para crear canales, no intentamos crear
+	const me = guild.members.me;
+	if (!me || !me.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+		console.log(`[ENTRADAS] No tengo permiso para crear canales en el servidor ${guildId}. Usa /cambiarentradas para seleccionar uno.`);
+		return null;
+	}
+
+	// 4) Intentamos crear un canal nuevo #entradas SOLO si tenemos permisos
+	try {
+		canal = await guild.channels.create({
+			name: 'entradas',
+			type: Discord.ChannelType.GuildText,
+			reason: 'Canal de entradas/autocreado por el bot',
+		});
+		console.log(`[ENTRADAS] Canal #${canal.name} creado en servidor ${guildId}.`);
+
+		twitchConfig[guildId].welcomeChannelId = canal.id;
+		saveConfig();
+
+		return canal;
+	} catch (error) {
+		console.error('[ENTRADAS] No se pudo crear el canal de entradas:', error);
+		return null;
+	}
+}
+
+// ==============================
+//  FUNCIÓN DE ENVÍO SEGURO (PROTEGE DE Missing Access)
+// ==============================
+
+async function safeSendEntradaSalida(canal, payload, guildId) {
+	try {
+		await canal.send(payload);
+	} catch (err) {
+		console.error('[ENTRADAS] Error al enviar mensaje:', err);
+
+		// 50001 = Missing Access, 50013 = Missing Permissions
+		if ((err.code === 50001 || err.code === 50013) && twitchConfig[guildId]) {
+			console.log(`[ENTRADAS] Perdí acceso al canal ${canal.id} en ${guildId}, reseteando welcomeChannelId.`);
+			twitchConfig[guildId].welcomeChannelId = null;
+			saveConfig();
 		}
-	
-		const canal = guild.channels.cache.get(canalSeleccionadoId);
-		if (canal) {
-			if (newUsers[guild.id].size > 0) {
-				const userlist = newUsers[guild.id].map(u => u.toString()).join(" ");
-				canal.send("Bienvenido mortal disfruta tu estadia OwO !\n" + userlist);
-				canal.send({ embeds: [RIR] });
-				newUsers[guild.id].clear();
-			}
-		} else {
-			console.log("El canal especificado no existe en este servidor.");
-		}
-	});
+	}
+}
+
+
+// ==============================
+//  EVENTOS DE ENTRADA / SALIDA
+// ==============================
+
+client.on("guildMemberAdd", async (member) => {
+	const guild = member.guild;
+	const guildId = guild.id;
+
+	if (!newUsers[guildId]) newUsers[guildId] = new Discord.Collection();
+	newUsers[guildId].set(member.id, member.user);
+
+	const canal = await getOrCreateWelcomeChannel(guild);
+	if (!canal) {
+		console.log(`[ENTRADAS] No hay canal disponible para bienvenida en el servidor ${guildId}.`);
+		return;
+	}
+
+	if (newUsers[guildId].size > 0) {
+		const userlist = newUsers[guildId].map((u) => u.toString()).join(" ");
+
+		// Clonamos el embed base y cambiamos la imagen según la fecha
+		const embedBienvenida = EmbedBuilder.from(RIR);
+		embedBienvenida.setImage(getWelcomeGifForDate());
+
+		await safeSendEntradaSalida(canal, "Bienvenido mortal, disfruta tu estadía OwO !\n" + userlist, guildId);
+		await safeSendEntradaSalida(canal, { embeds: [embedBienvenida] }, guildId);
+
+		newUsers[guildId].clear();
+	}
+});
+
+client.on("guildMemberRemove", async (member) => {
+	const guild = member.guild;
+	const guildId = guild.id;
+
+	if (!newUsers[guildId]) newUsers[guildId] = new Discord.Collection();
+	newUsers[guildId].set(member.id, member.user);
+
+	const canal = await getOrCreateWelcomeChannel(guild);
+	if (!canal) {
+		console.log(`[ENTRADAS] No hay canal disponible para despedida en el servidor ${guildId}.`);
+		return;
+	}
+
+	if (newUsers[guildId].size > 0) {
+		const userlist = newUsers[guildId].map((u) => u.toString()).join(" ");
+
+		// Clonamos el embed base y cambiamos la imagen según la fecha
+		const embedDespedida = EmbedBuilder.from(RIR1);
+		embedDespedida.setImage(getFarewellGifForDate());
+
+		await safeSendEntradaSalida(canal, "¡Adiós!\n" + userlist, guildId);
+		await safeSendEntradaSalida(canal, { embeds: [embedDespedida] }, guildId);
+
+		newUsers[guildId].clear();
+	}
+});
+
+
+
+//=============aqui el final de entradas ============================
 	//-------------------------------------------------------------------------------------------------------------------
 	
 	
@@ -2872,45 +3573,101 @@ client.on("messageCreate", (message) => {
 	//----------------------------------------------------------------------------------------------------
 	if (message.content.includes(prefix + "help")) {
 
-		const help = new EmbedBuilder()
-			.setTitle('Comandos \nprefix = *')
+	const help = new EmbedBuilder()
+		.setTitle('Comandos \nprefix = *')
+		.setDescription(
+			"La nueva versión de Yuima quitó varios comandos por su poco uso, estos son los actuales:\n" +
+			"\n" +
+			"**kiss** = dar un beso\n" +
+			"**hug** = dar un abrazo\n" +
+			"**waifu** = dar una waifu\n" +
+			"**suwaifu** = ver la waifu de tu amigo\n" +
+			"**sad** = triste\n" +
+			"**cry** = llorar\n" +
+			"**pelea** = busca pelea con alguien\n" +
+			"**hit** = pégale a alguien\n" +
+			"**kick** = patea a alguien\n" +
+			"**meme** = un meme random\n" +
+			"**f** = muestra tus respetos\n" +
+			"**chat** = muestra cómo te deja lo que lees\n" +
+			"**miwaifu** = tu waifu\n"
+		)
+		.setFooter({
+			text: "Curiosidad: el comando menos usado de los viejos es el de husbando, nadie quiere husbandos al parecer."
+		})
+		.setColor("#FF0000")
+		.setImage('https://cdn.discordapp.com/attachments/638450747968847928/853702593864007760/Webp.net-gifmaker_3.gif');
 
-			.setDescription("La nueva version de Yuima quito varios comandos por su poco uso estos son los actuales \nKiss =dar un beso \nhug = dar un abrazo \nwaifu = dar una waifu \nsuwaifu = ver la waifu de tu amigo \nsad = triste \ncry =llorar \npelea = busca pelea con alguien \nhit = pegale a alguien\nkick = patea a alguien \nmeme = un meme random \nf = muestra tus respetos \nchat = muestra como te deja lo que lees \nmiwaifu = tu waifu")
-			.setFooter({
-				text: "Una curiosidad es que el comando menos usado de los viejos es el de husbando nadie quiere husbandos al parecer"
-			})
-			.setColor("#FF0000")
 
-			.setImage('https://cdn.discordapp.com/attachments/638450747968847928/853702593864007760/Webp.net-gifmaker_3.gif')
+	const help1 = new EmbedBuilder()
+		.setTitle('Comandos \nprefix = *')
+		.setDescription(
+			"**husbando** = le da un husbando a tu amigo\n" +
+			"**suhusbando** = te dice el husbando de tu amigo\n" +
+			"**mihusbando** = te dice tu husbando\n" +
+			"**congrats** = felicita a alguien\n" +
+			"**ayuda** = si estás pasando por un mal momento y necesitas un mini coach gratuito o sientes ansiedad\n" +
+			"**genshin + nombre del personaje** = te da info del personaje (versión clásica con prefijo)\n" +
+			"**/play** = toca una canción (no olvides usar el `/`)\n" +
+			"\n" +
+			"Para saludos de entrada/salida:\n" +
+			"Ahora puedes usar **/cambiarentradas** para elegir el canal de bienvenida/despedida.\n" +
+			"Si creas un canal llamado **entradas**, el bot también intentará usarlo automáticamente."
+		)
+		.setFooter({
+			text: "Dato random: Yuima era originalmente morena, pero por no saber colorear la volviste blanca. Ahora existen las dos versiones, así que son hermanas ninja."
+		})
+		.setColor("#FF0000")
+		.setImage('https://cdn.discordapp.com/attachments/1040686328087597169/1074075395512598678/2_girlskunoichitan_twintails_ponytail_red_eyes_ninja_dark-skinned_female_s-3713014042.png');
 
 
-		const help1 = new EmbedBuilder()
-			.setTitle('Comandos \nprefix = *')
+	const help2 = new EmbedBuilder()
+		.setTitle('Comandos de /')
+		.setDescription(
+			"Solo le agregué el comando de **/buscaranime** + nombre del anime: te da su info y link en AnimeFLV.\n" +
+			"Si buscas por ejemplo *one piece* te dará todo lo relacionado, pero si buscas *One Piece Film Z* te dará la película específica.\n" +
+			"PD: no me agrada Boa, nadie que patea perritos es muy bueno.\n" +
+			"\n" +
+			"**/anime** + nombre del anime = igual que /buscaranime pero más directo.\n" +
+			"**/genshinarmas** = te da las 3 mejores armas para un personaje de Genshin (las armas pesan más que los artefactos, créeme).\n" +
+			"**/genshinartefactos** = te da los mejores sets de artefactos para un personaje de Genshin.\n" +
+			"\n" +
+			"**/cambiarentradas** = selecciona el canal donde se dará la bienvenida y despedida a la gente del servidor.\n" +
+			"\n" +
+			"**/codigosgenshin** = códigos actuales de Genshin Impact.\n" +
+			"**/codigos_honkai** = códigos de Honkai: Star Rail.\n" +
+			"**/codigos_honkai3d** = códigos de Honkai Impact 3rd.\n" +
+			"**/codigoszzz** = códigos actuales de Zenless Zone Zero (Nap).\n" +
+			"**/mistral** = preguntas a la IA (las clásicas IAS).\n" +
+			"\n" +
+			"**/combate** = retas a alguien a un combate por turnos.\n" +
+			"**/si** / **/no** = aceptas o rechazas el combate.\n" +
+			"**/carrera** = inicia una carrera de emoticones.\n" +
+			"**/participar** = te unes a la carrera activa.\n" +
+			"\n" +
+			"**/selectchannel** = selecciona el canal donde se anunciarán los directos de Twitch para este servidor.\n" +
+			"**/selecttwitchchannel** = registra el canal de Twitch que quieres que el bot vigile.\n" +
+			"\n" +
+			"**/navidad** = envía los mensajes de Navidad y Año Nuevo.\n" +
+			"**/channel** = muestra el enlace/canal de anuncios principal (según lo que tengas configurado en el bot).\n" +
+			"**/registrarglobal** = registra todos los comandos globalmente (solo admins, no lo toques si no sabes qué haces).\n"+
+			"**/Playerfornite** = te da las estadisticas y rango de un jugador de fortnite\n"+
+			"**/selectgiveaswaychannel** = Selecciona un canal para juegos gratis\n"+
+			"**/playermarvel = muestra las estadisticas de una persona en marvel rivals"
 
-			.setDescription("Husbando = le da un husbando a tu amigo \nsuhusbando= te dice el husbando de tu amigo \nmihusbando = te dice tu husbando\ncongrats = felicita a alguien\nayuda = si estas pasando por un mal momento y necesitas un coach gratuito o sientes ansiedad \nsi quieres que el bot salude al entrar y salir del server crea un canal llamado entradas\n/Play = toca una cancion no olvides usar el /\ngenshin seguido de  el personaje que buscas = *te da su  info ")
-			.setFooter({
-				text: "Una curiosidad es que la razon por la que la imagen de yuima cambie de morena a blanca es que su diseño original era morena pero al no saber yo colorear correctamente la volvi blanca pero ahora ya es posible ver sus dos versiones asi que dire que son hermanas ninja "
-			})
-			.setColor("#FF0000")
+			
+		)
+		.setFooter({
+			text: "El nombre completo de las hermanas Yuima es Dark-Yuima-Jojan y Susa-Yuima-Jojan."
+		})
+		.setColor("#FF0000")
+		.setImage('https://i.imgur.com/v6Ryh1F.png');
 
-			.setImage('https://cdn.discordapp.com/attachments/1040686328087597169/1074075395512598678/2_girlskunoichitan_twintails_ponytail_red_eyes_ninja_dark-skinned_female_s-3713014042.png')
+	message.channel.send({ embeds: [help] });
+	message.channel.send({ embeds: [help1] });
+	message.channel.send({ embeds: [help2] });
+}
 
-
-			const help2 = new EmbedBuilder()
-			.setTitle('Comandos de /')
-
-			.setDescription("solo le agrege el comando de /buscaranime + nombre del anime te da su info y link en animeflv otra cosa si buscas por ejemplo one piece te dara todo lo relacionado a el pero si buscan One Piece Film Z les dara en especifico la pelicula PD:no me agrada Boa nadie que patea perritos es muy bueno\ngenshinarmas = te da las 3 mejores armas para un personaje de genshin si solo 3 porque creanme que las armas estan mas pesadas que los artefactos si usan el comando de artefactos se daran cuenta de lo que digo y las armas facil son el triple \ngenshinartefactos te dan los mejores artefactos de un personaje genshin\ncambiarentradas = le da la bienvenida y despedida a las personas que quieras en el canal seleccionado \ncodigoszzz = te da los codigos actuales del zzz (nap) \ncodigos genshin = ya deberias saberlo no?\ncodigos_wuwa= encerio necesitas saberlo?\ncodigoshonkai = si de ambos honkai....\nmistral= las clasicas IAS\ncombate=retas a alguien a un combate\ncarrera= ya es obvio no?  ")
-			.setFooter({
-				text: "El nombre completo de las hermanas yuima son dark-yuima-jojan y susa-yuima-jojan"
-			})
-			.setColor("#FF0000")
-
-			.setImage('https://i.imgur.com/v6Ryh1F.png')
-
-		message.channel.send({ embeds: [help] });
-		message.channel.send({ embeds: [help1] });
-		message.channel.send({ embeds: [help2] });
-	}
 	//-------------------------------------------------------------------------------------
 	///--------------------------------------------------------------------------------------
 	if (message.content.includes(prefix + "ayuda")) {

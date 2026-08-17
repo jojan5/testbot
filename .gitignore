@@ -131,3 +131,17 @@ dist
 
 # Directory used by Appwrite CLI for local development
 .appwrite
+# --- Bot de Discord ---
+
+# Secretos y credenciales
+.env
+config.json
+credentials.json
+settings.cjs
+
+# Estado en tiempo de ejecucion
+db/
+twitch-config.json
+give.json
+giveChannel.json
+logs.txt

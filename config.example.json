@@ -1,0 +1,23 @@
+{
+    "token": "TU_TOKEN_DE_DISCORD",
+    "twitch_token": "",
+    "twitch_id": "TU_TWITCH_USER_ID",
+    "twitch_secret": "TU_TWITCH_CLIENT_SECRET",
+    "CLIENT_ID": "TU_DISCORD_CLIENT_ID",
+    "clientId": "TU_DISCORD_CLIENT_ID",
+    "guildId": "TU_DISCORD_GUILD_ID",
+    "DiscordServerId": "TU_DISCORD_GUILD_ID",
+    "twitch_clientID": "TU_TWITCH_CLIENT_ID",
+    "cron": "*/10 * * * * *",
+    "channelID": "ID_DEL_CANAL_DE_ANUNCIOS",
+    "roleID": "ROLE_ID(NOT REQUIRED)",
+    "channels": [
+        {
+            "ChannelName": "rubius",
+            "DiscordServer": "DISCORD_SERVER_INVITE_URL(NOT REQUIRED)",
+            "twitch_stream_id": "",
+            "discord_message_id": ""
+        }
+    ],
+    "authToken": ""
+}

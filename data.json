@@ -44,19 +44,7 @@
         "timeZone": "America/Mexico_City"
       },
       "language": "english"
-    },
-    "937454023924142150": {
-      "streamers": [
-        "rubius"
-      ],
-      "announcementChannel": null,
-      "reactions": [],
-      "message": "@everyone %name% **%status%**!",
-      "time": {
-        "locale": "es-MX",
-        "timeZone": "America/Mexico_City"
-      },
-      "language": "english"
     }
+    
   }
 }
