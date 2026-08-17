@@ -100,7 +100,8 @@ const client = new Client({
 })
 
 // Anti-raid / anti-spam (ver security/antiraid.js y *seguridad ayuda)
-require('./security/antiraid').init(client);
+const antiraid = require('./security/antiraid');
+antiraid.init(client);
 
 //-------------------------------------------------------------------------------// ==============================
 //  MENSAJES ESPECIALES NAVIDAD / AÑO NUEVO
@@ -352,6 +353,7 @@ client.on('ready', async () => {
 //-----------------------------------------------------------------
 
 const commands = [
+  antiraid.slashCommand, // /seguridad — auditoría anti-raid
   new SlashCommandBuilder()
     .setName("combate")
     .setDescription("Reta a otro jugador a un combate por turnos.")
@@ -3616,7 +3618,12 @@ client.on("messageCreate", (message) => {
 			"\n" +
 			"Para saludos de entrada/salida:\n" +
 			"Ahora puedes usar **/cambiarentradas** para elegir el canal de bienvenida/despedida.\n" +
-			"Si creas un canal llamado **entradas**, el bot también intentará usarlo automáticamente."
+			"Si creas un canal llamado **entradas**, el bot también intentará usarlo automáticamente.\n" +
+			"\n" +
+			"🛡️ **Moderación** (necesitas *Gestionar servidor*):\n" +
+			"**seguridad** = ver y cambiar la protección anti-raid / anti-spam\n" +
+			"**seguridad ayuda** = todos los subcomandos (umbrales, castigos, roles exentos...)\n" +
+			"**seguridad cerrar** / **seguridad abrir** = cierra o abre el servidor a mano ante un raid"
 		)
 		.setFooter({
 			text: "Dato random: Yuima era originalmente morena, pero por no saber colorear la volviste blanca. Ahora existen las dos versiones, así que son hermanas ninja."
@@ -3657,9 +3664,13 @@ client.on("messageCreate", (message) => {
 			"**/registrarglobal** = registra todos los comandos globalmente (solo admins, no lo toques si no sabes qué haces).\n"+
 			"**/Playerfornite** = te da las estadisticas y rango de un jugador de fortnite\n"+
 			"**/selectgiveaswaychannel** = Selecciona un canal para juegos gratis\n"+
-			"**/playermarvel = muestra las estadisticas de una persona en marvel rivals"
+			"**/playermarvel = muestra las estadisticas de una persona en marvel rivals\n"+
+			"\n" +
+			"🛡️ **/seguridad** = auditoría del servidor: revisa si al bot le faltan permisos, si el servidor "
+			+ "tiene la verificación y el 2FA flojos, y cuántos raids, spammers y mensajes se han frenado. "
+			+ "Solo lo ves tú salvo que uses la opción `publico`. Requiere *Gestionar servidor*."
 
-			
+
 		)
 		.setFooter({
 			text: "El nombre completo de las hermanas Yuima es Dark-Yuima-Jojan y Susa-Yuima-Jojan."

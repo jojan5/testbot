@@ -11,6 +11,7 @@ const {
 	EmbedBuilder,
 	PermissionFlagsBits,
 	GuildVerificationLevel,
+	SlashCommandBuilder,
 } = require('discord.js');
 
 const CONFIG_FILE = path.join(__dirname, '..', 'security-config.json');
@@ -83,6 +84,24 @@ const joinLog = new Map(); // guildId -> [timestamp, ...]
 const lockdowns = new Map(); // guildId -> { until, previousLevel, timer }
 const msgLog = new Map(); // `${guildId}:${userId}` -> { times: [], contents: [], messages: [] }
 const raidJoiners = new Map(); // guildId -> Set<userId> que entraron durante el raid
+const stats = new Map(); // guildId -> contadores desde el arranque
+
+const ARRANQUE = Date.now();
+
+function getStats(guildId) {
+	if (!stats.has(guildId)) {
+		stats.set(guildId, {
+			raids: 0,
+			castigados: 0,
+			mensajesBorrados: 0,
+			invitacionesBorradas: 0,
+			cuentasNuevas: 0,
+			ultimoRaid: null,
+			ultimoSpam: null,
+		});
+	}
+	return stats.get(guildId);
+}
 
 // ==============================
 //  UTILIDADES
@@ -190,6 +209,10 @@ async function startLockdown(guild, cfg, motivo) {
 	lockdowns.set(guild.id, { until, previousLevel, timer });
 	raidJoiners.set(guild.id, new Set());
 
+	const s = getStats(guild.id);
+	s.raids++;
+	s.ultimoRaid = Date.now();
+
 	await log(
 		guild,
 		cfg,
@@ -281,6 +304,7 @@ async function onGuildMemberAdd(member) {
 			'Anti-raid: entró durante un raid detectado',
 			cfg.lockdownMinutes * 60 * 1000,
 		);
+		if (aplicada) getStats(guild.id).castigados++;
 
 		await log(
 			guild,
@@ -311,6 +335,10 @@ async function onGuildMemberAdd(member) {
 				cfg.timeoutMinutes * 60 * 1000,
 			);
 
+			const s = getStats(guild.id);
+			s.cuentasNuevas++;
+			if (aplicada) s.castigados++;
+
 			await log(
 				guild,
 				cfg,
@@ -340,10 +368,16 @@ function normalizar(texto) {
 }
 
 async function borrarMensajes(mensajes) {
+	let borrados = 0;
 	for (const msg of mensajes) {
 		if (!msg.deletable) continue;
-		await msg.delete().catch(() => {});
+		const ok = await msg
+			.delete()
+			.then(() => true)
+			.catch(() => false);
+		if (ok) borrados++;
 	}
+	return borrados;
 }
 
 async function onMessageCreate(message) {
@@ -403,7 +437,11 @@ async function onMessageCreate(message) {
 	// --- 4. Invitaciones a otros servidores ---
 	if (!motivo && cfg.blockInvites && INVITE_REGEX.test(message.content ?? '')) {
 		// Primera vez solo se borra y se avisa; no castigamos por un link suelto
-		await borrarMensajes([message]);
+		const quitados = await borrarMensajes([message]);
+		const s = getStats(message.guild.id);
+		s.invitacionesBorradas += quitados;
+		s.mensajesBorrados += quitados;
+
 		await log(
 			message.guild,
 			cfg,
@@ -420,7 +458,7 @@ async function onMessageCreate(message) {
 
 	// --- Castigo ---
 	msgLog.delete(clave);
-	await borrarMensajes(aBorrar);
+	const borrados = await borrarMensajes(aBorrar);
 
 	const aplicada = await punish(
 		member,
@@ -428,6 +466,11 @@ async function onMessageCreate(message) {
 		`Anti-spam: ${motivo}`,
 		cfg.timeoutMinutes * 60 * 1000,
 	);
+
+	const s = getStats(message.guild.id);
+	s.mensajesBorrados += borrados;
+	s.ultimoSpam = Date.now();
+	if (aplicada) s.castigados++;
 
 	await log(
 		message.guild,
@@ -444,7 +487,7 @@ async function onMessageCreate(message) {
 					value: aplicada ? `${aplicada} ${cfg.timeoutMinutes} min` : 'no se pudo castigar (permisos/jerarquía)',
 					inline: true,
 				},
-				{ name: 'Mensajes borrados', value: String(aBorrar.length), inline: true },
+				{ name: 'Mensajes borrados', value: String(borrados), inline: true },
 			)
 			.setTimestamp(),
 	);
@@ -507,6 +550,139 @@ function estadoEmbed(guild, cfg) {
 			},
 		)
 		.setFooter({ text: `${PREFIX}seguridad ayuda — para ver los subcomandos` });
+}
+
+// ==============================
+//  AUDITORÍA (/seguridad)
+// ==============================
+
+const NIVELES_VERIFICACION = {
+	[GuildVerificationLevel.None]: 'Ninguna ⚠️',
+	[GuildVerificationLevel.Low]: 'Baja (email verificado)',
+	[GuildVerificationLevel.Medium]: 'Media (5 min en Discord)',
+	[GuildVerificationLevel.High]: 'Alta (10 min en el servidor)',
+	[GuildVerificationLevel.VeryHigh]: 'Muy alta (teléfono verificado)',
+};
+
+function duracionLegible(ms) {
+	const min = Math.floor(ms / 60000);
+	const horas = Math.floor(min / 60);
+	const dias = Math.floor(horas / 24);
+	if (dias > 0) return `${dias}d ${horas % 24}h`;
+	if (horas > 0) return `${horas}h ${min % 60}m`;
+	return `${min}m`;
+}
+
+/**
+ * Construye el informe de auditoría: permisos reales del bot, huecos de
+ * configuración y actividad registrada desde que arrancó el proceso.
+ */
+async function buildAuditEmbed(guild) {
+	const cfg = getGuildConfig(guild.id);
+	const s = getStats(guild.id);
+	const yo = guild.members.me;
+	const problemas = [];
+
+	// --- Permisos que el bot necesita según lo configurado ---
+	const necesarios = [
+		['ModerateMembers', 'Moderar miembros', 'silenciar (timeout) a quien spamea'],
+		['ManageMessages', 'Gestionar mensajes', 'borrar los mensajes de spam'],
+		['ManageGuild', 'Gestionar servidor', 'subir la verificación durante un raid'],
+	];
+	if (cfg.raidAction === 'kick' || cfg.newAccountAction === 'kick') {
+		necesarios.push(['KickMembers', 'Expulsar miembros', 'la acción "kick" que configuraste']);
+	}
+	if (cfg.raidAction === 'ban') {
+		necesarios.push(['BanMembers', 'Banear miembros', 'la acción "ban" que configuraste']);
+	}
+
+	const permisos = necesarios.map(([flag, nombre, para]) => {
+		const tiene = yo?.permissions.has(PermissionFlagsBits[flag]) ?? false;
+		if (!tiene) problemas.push(`Falta **${nombre}** — sin él no puedo ${para}.`);
+		return `${tiene ? '✅' : '❌'} ${nombre}`;
+	});
+
+	// --- Canal de logs ---
+	let estadoLog;
+	if (!cfg.logChannelId) {
+		estadoLog = '❌ sin configurar';
+		problemas.push(`No hay canal de logs: no verás ningún reporte. Usa \`${PREFIX}seguridad log #canal\`.`);
+	} else {
+		const canal = await getLogChannel(guild, cfg);
+		if (canal) {
+			estadoLog = `✅ <#${cfg.logChannelId}>`;
+		} else {
+			estadoLog = `❌ <#${cfg.logChannelId}> inaccesible`;
+			problemas.push('El canal de logs configurado no existe o no puedo escribir en él.');
+		}
+	}
+
+	// --- Ajustes del propio servidor (no dependen del bot) ---
+	if (guild.verificationLevel === GuildVerificationLevel.None) {
+		problemas.push('El servidor no exige **ninguna verificación**: cualquier cuenta recién hecha puede entrar y escribir.');
+	}
+	if (guild.mfaLevel === 0) {
+		problemas.push('El servidor no exige **2FA a los moderadores**. Si le roban la cuenta a un mod, se acabó.');
+	}
+	if (!cfg.enabled) {
+		problemas.push('⚠️ La protección está **desactivada** (`*seguridad on` para encenderla).');
+	}
+
+	const lockdown = lockdowns.get(guild.id);
+
+	const embed = new EmbedBuilder()
+		.setColor(problemas.length === 0 ? 0x00cc66 : problemas.length > 2 ? 0xff0000 : 0xffaa00)
+		.setTitle('🔎 Auditoría de seguridad')
+		.setDescription(
+			lockdown
+				? `🚨 **LOCKDOWN ACTIVO** hasta <t:${Math.floor(lockdown.until / 1000)}:T>`
+				: cfg.enabled
+					? '🛡️ Protección activa.'
+					: '⚠️ Protección **desactivada**.',
+		)
+		.addFields(
+			{ name: '🔑 Permisos del bot', value: permisos.join('\n'), inline: true },
+			{
+				name: '🏰 Ajustes del servidor',
+				value:
+					`Verificación: **${NIVELES_VERIFICACION[guild.verificationLevel] ?? guild.verificationLevel}**\n` +
+					`Filtro de contenido: **${['desactivado ⚠️', 'solo sin rol', 'todos'][guild.explicitContentFilter] ?? '?'}**\n` +
+					`2FA para mods: **${guild.mfaLevel === 0 ? 'no ⚠️' : 'sí'}**`,
+				inline: true,
+			},
+			{ name: '📋 Canal de logs', value: estadoLog, inline: false },
+			{
+				name: `📊 Actividad (últimas ${duracionLegible(Date.now() - ARRANQUE)})`,
+				value:
+					`Raids detectados: **${s.raids}**${s.ultimoRaid ? ` — último <t:${Math.floor(s.ultimoRaid / 1000)}:R>` : ''}\n` +
+					`Usuarios castigados: **${s.castigados}**\n` +
+					`Mensajes borrados: **${s.mensajesBorrados}**\n` +
+					`Invitaciones borradas: **${s.invitacionesBorradas}**\n` +
+					`Cuentas nuevas marcadas: **${s.cuentasNuevas}**` +
+					(s.ultimoSpam ? `\nÚltimo spam: <t:${Math.floor(s.ultimoSpam / 1000)}:R>` : ''),
+				inline: false,
+			},
+			{
+				name: '⚙️ Umbrales activos',
+				value:
+					`Raid: **${cfg.joinThreshold}** entradas / **${Math.round(cfg.joinWindowMs / 1000)}s** → ${cfg.raidAction}\n` +
+					`Cuentas nuevas: **${cfg.minAccountAgeDays}d** → ${cfg.newAccountAction}\n` +
+					`Spam: **${cfg.msgThreshold}** msgs / **${Math.round(cfg.msgWindowMs / 1000)}s**, ` +
+					`repetidos **${cfg.duplicateThreshold}**, menciones **${cfg.mentionLimit}**\n` +
+					`Castigo: **${cfg.timeoutMinutes}** min · Invitaciones: **${cfg.blockInvites ? 'bloqueadas' : 'permitidas'}**`,
+				inline: false,
+			},
+		);
+
+	embed.addFields({
+		name: problemas.length ? `⚠️ Problemas detectados (${problemas.length})` : '✅ Sin problemas',
+		value: problemas.length
+			? problemas.map((p) => `• ${p}`).join('\n').slice(0, 1024)
+			: 'Todo correctamente configurado.',
+		inline: false,
+	});
+
+	return embed.setFooter({ text: `${PREFIX}seguridad ayuda — para cambiar los ajustes` }).setTimestamp();
 }
 
 const AYUDA = [
@@ -702,7 +878,49 @@ function limpiar() {
 //  ENGANCHE
 // ==============================
 
+// Definición del slash command; index.js la mete en su array de comandos.
+const slashCommand = new SlashCommandBuilder()
+	.setName('seguridad')
+	.setDescription('Auditoría de seguridad: permisos, ajustes y actividad anti-raid del servidor.')
+	.setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+	.setDMPermission(false)
+	.addBooleanOption((option) =>
+		option
+			.setName('publico')
+			.setDescription('Mostrar el informe a todo el canal (por defecto solo lo ves tú).')
+			.setRequired(false),
+	);
+
+async function onInteraction(interaction) {
+	if (!interaction.isChatInputCommand()) return;
+	if (interaction.commandName !== 'seguridad') return;
+
+	if (!interaction.guild) {
+		return interaction.reply({ content: 'Este comando solo funciona dentro de un servidor.', ephemeral: true });
+	}
+	if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+		return interaction.reply({ content: '❌ Necesitas el permiso **Gestionar servidor**.', ephemeral: true });
+	}
+
+	const publico = interaction.options.getBoolean('publico') ?? false;
+	await interaction.deferReply({ ephemeral: !publico });
+
+	try {
+		const embed = await buildAuditEmbed(interaction.guild);
+		await interaction.editReply({ embeds: [embed] });
+	} catch (err) {
+		console.error('[SEGURIDAD] Error generando la auditoría:', err);
+		await interaction.editReply('❌ No se pudo generar la auditoría. Revisa la consola del bot.');
+	}
+}
+
 function init(client) {
+	client.on(Events.InteractionCreate, (interaction) => {
+		onInteraction(interaction).catch((err) =>
+			console.error('[SEGURIDAD] Error en /seguridad:', err),
+		);
+	});
+
 	client.on(Events.GuildMemberAdd, (member) => {
 		onGuildMemberAdd(member).catch((err) =>
 			console.error('[SEGURIDAD] Error en guildMemberAdd:', err),
@@ -734,4 +952,4 @@ function init(client) {
 	console.log('[SEGURIDAD] Módulo anti-raid / anti-spam activo.');
 }
 
-module.exports = { init };
+module.exports = { init, slashCommand, buildAuditEmbed };
