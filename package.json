@@ -11,6 +11,7 @@
   "license": "ISC",
   "dependencies": {
     "@aimaginationlab/marvel-rivals-mcp": "^0.0.6",
+    "@napi-rs/canvas": "^1.0.6",
     "@discordjs/opus": "^0.8.0",
     "@discordjs/rest": "^1.5.0",
     "@discordjs/voice": "^0.14.0",
@@ -20,7 +21,6 @@
     "axios": "^1.6.2",
     "bull": "^4.16.3",
     "bullmq": "^5.18.0",
-    "canvas": "^3.2.1",
     "chillout": "^5.0.0",
     "colors": "^1.4.0",
     "const": "^1.0.0",

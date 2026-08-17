@@ -1,4 +1,6 @@
-const { createCanvas, loadImage } = require('canvas');
+// @napi-rs/canvas en vez de canvas: trae binarios precompilados, así que no
+// hay que compilar nada en el host (canvas moría por falta de RAM al instalar).
+const { createCanvas, loadImage } = require('@napi-rs/canvas');
 const { AttachmentBuilder } = require('discord.js');
 const axios = require('axios');
 const sharp = require('sharp');
