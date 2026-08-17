@@ -79,8 +79,26 @@ async function handlePlayerMarvel(interaction) {
         if (!data || data.isPrivate)
             return interaction.followUp('⚠️ Perfil privado o no disponible.');
 
-    } catch {
-        return interaction.followUp('❌ Error obteniendo datos.');
+    } catch (err) {
+        const status = err.response?.status;
+
+        console.error('[MARVEL] Falló la consulta a marvelrivalsapi.com', {
+            usuario: username,
+            status: status ?? '(sin respuesta HTTP)',
+            detalle: err.response?.data ?? err.message,
+        });
+
+        const porStatus = {
+            401: '❌ La API key de Marvel Rivals no es válida o ha caducado.',
+            403: '❌ La API key de Marvel Rivals no tiene acceso a este recurso.',
+            404: `❌ No encontré al jugador **${username}**. Revisa que el nombre esté bien escrito.`,
+            429: '⏳ La API de Marvel Rivals está limitando las peticiones. Prueba en un minuto.',
+        };
+
+        return interaction.followUp(
+            porStatus[status] ??
+                `❌ No pude consultar la API de Marvel Rivals${status ? ` (HTTP ${status})` : ' (no respondió)'}.`,
+        );
     }
 
     const canvas = createCanvas(WIDTH, HEIGHT);
