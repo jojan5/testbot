@@ -38,6 +38,26 @@ function buildAsset(path) {
     return BASE_ASSETS + path;
 }
 
+/**
+ * Consulta la API reintentando los fallos transitorios (5xx o caída de red).
+ * Un 502 puntual del proveedor no debería tumbar el comando.
+ */
+async function pedirConReintentos(url, headers, intentos = 3) {
+    for (let i = 0; i < intentos; i++) {
+        try {
+            return await axios.get(url, { headers, timeout: 10000 });
+        } catch (err) {
+            const status = err.response?.status;
+            const transitorio = !status || status >= 500;
+
+            if (!transitorio || i === intentos - 1) throw err;
+
+            console.warn(`[MARVEL] Intento ${i + 1}/${intentos} falló (${status ?? 'sin respuesta'}), reintentando...`);
+            await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+        }
+    }
+}
+
 async function safeImage(path) {
     try {
         const url = buildAsset(path);
@@ -69,9 +89,9 @@ async function handlePlayerMarvel(interaction) {
     let data;
 
     try {
-        const response = await axios.get(
+        const response = await pedirConReintentos(
             `https://marvelrivalsapi.com/api/v1/player/${encodeURIComponent(username)}`,
-            { headers: { 'x-api-key': API_KEY } }
+            { 'x-api-key': API_KEY }
         );
 
         data = response.data;
@@ -94,6 +114,14 @@ async function handlePlayerMarvel(interaction) {
             404: `❌ No encontré al jugador **${username}**. Revisa que el nombre esté bien escrito.`,
             429: '⏳ La API de Marvel Rivals está limitando las peticiones. Prueba en un minuto.',
         };
+
+        // 5xx = el problema está en el servidor de marvelrivalsapi.com, no aquí
+        if (status >= 500) {
+            return interaction.followUp(
+                `🔧 La API de Marvel Rivals está caída ahora mismo (HTTP ${status}). ` +
+                    'No es un problema del bot; inténtalo de nuevo en unos minutos.',
+            );
+        }
 
         return interaction.followUp(
             porStatus[status] ??
