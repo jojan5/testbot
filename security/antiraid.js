@@ -9,6 +9,7 @@ const path = require('path');
 const {
 	Events,
 	EmbedBuilder,
+	AttachmentBuilder,
 	PermissionFlagsBits,
 	GuildVerificationLevel,
 	SlashCommandBuilder,
@@ -42,6 +43,10 @@ const DEFAULTS = {
 	everyoneMinDays: 30, // días que hay que llevar para poder usar @everyone (0 = sin filtro)
 	timeoutMinutes: 10, // castigo por spam
 	blockInvites: true,
+
+	// Imagen del aviso. Si es null se adjunta assets/seguridad.gif del repo,
+	// porque los enlaces del CDN de Discord llevan firma y caducan.
+	alertImageUrl: null,
 
 	exemptRoleIds: [],
 };
@@ -137,13 +142,128 @@ async function getLogChannel(guild, cfg) {
 	}
 }
 
-async function log(guild, cfg, embed) {
+// ==============================
+//  RESUMEN AGRUPADO DE INCIDENTES
+//  En vez de un mensaje por cada usuario frenado (que en un raid llena el
+//  canal), se juntan los de una misma oleada y se manda uno solo.
+// ==============================
+
+const GIF_ALERTA = path.join(__dirname, '..', 'assets', 'seguridad.gif');
+
+const VENTANA_RESUMEN_MS = 8000; // se espera este rato de calma antes de enviar
+const ESPERA_MAXIMA_MS = 30000; // ...pero nunca se retrasa más de esto
+
+const resumenes = new Map(); // guildId -> { incidentes, notas, inicio, timer }
+
+/**
+ * Apunta un incidente para el próximo resumen. `incidentes` son usuarios a los
+ * que se les impidió publicar (son los que se cuentan); `notas` es contexto,
+ * como el inicio de un lockdown.
+ */
+function registrarIncidente(guild, cfg, incidente) {
+	if (!cfg.logChannelId) return;
+
+	let r = resumenes.get(guild.id);
+	if (!r) {
+		r = { incidentes: [], notas: [], inicio: Date.now(), timer: null };
+		resumenes.set(guild.id, r);
+	}
+
+	if (incidente.nota) r.notas.push(incidente.nota);
+	else r.incidentes.push(incidente);
+
+	if (r.timer) clearTimeout(r.timer);
+
+	// Si la oleada se alarga, se envía igualmente para no dejar a los mods a ciegas
+	const restante = Math.max(0, ESPERA_MAXIMA_MS - (Date.now() - r.inicio));
+	const espera = Math.min(VENTANA_RESUMEN_MS, restante);
+
+	r.timer = setTimeout(() => {
+		enviarResumen(guild, cfg).catch((err) =>
+			console.error('[SEGURIDAD] No se pudo enviar el resumen:', err.message),
+		);
+	}, espera);
+	r.timer.unref?.();
+}
+
+function fraseAnime(cuantos) {
+	if (cuantos === 1) {
+		return (
+			'Una sombra intentó colarse entre los muros del servidor.\n' +
+			'No llegó a pronunciar una sola palabra. **Sellado al instante.**'
+		);
+	}
+	if (cuantos <= 4) {
+		return (
+			'Un pequeño escuadrón se acercó a las puertas con malas intenciones.\n' +
+			'La barrera se alzó antes de que dijeran nada. **Ninguno pasó.**'
+		);
+	}
+	return (
+		'⚡ ¡Una horda cayó sobre el servidor! ⚡\n' +
+		'El sello resistió y los invasores fueron repelidos uno a uno.\n' +
+		'**La paz del reino sigue intacta.**'
+	);
+}
+
+async function enviarResumen(guild, cfg) {
+	const r = resumenes.get(guild.id);
+	if (!r) return;
+
+	resumenes.delete(guild.id);
+	if (r.timer) clearTimeout(r.timer);
+	if (!r.incidentes.length && !r.notas.length) return;
+
 	const canal = await getLogChannel(guild, cfg);
 	if (!canal) return;
+
+	const detenidos = new Set(r.incidentes.map((i) => i.id)).size;
+
+	const embed = new EmbedBuilder()
+		.setColor(detenidos >= 5 ? 0xff0000 : detenidos > 0 ? 0xff8800 : 0x00cc66)
+		.setTitle(detenidos > 0 ? '🛡️ ¡Intrusos repelidos!' : '🛡️ Aviso de seguridad')
+		.setDescription(detenidos > 0 ? fraseAnime(detenidos) : r.notas.join('\n'))
+		.setTimestamp();
+
+	if (detenidos > 0) {
+		embed.addFields({
+			name: '🚫 Detenidos antes de publicar',
+			value: `**${detenidos}** ${detenidos === 1 ? 'usuario' : 'usuarios'}`,
+			inline: true,
+		});
+
+		// Detalle compacto para que los moderadores sepan a quién revisar
+		const detalle = r.incidentes
+			.slice(0, 10)
+			.map((i) => `• ${i.tag} — ${i.motivo}${i.accion ? ` (${i.accion})` : ''}`)
+			.join('\n');
+
+		embed.addFields({
+			name: '📋 Detalle',
+			value:
+				(detalle + (r.incidentes.length > 10 ? `\n…y ${r.incidentes.length - 10} más` : '')).slice(0, 1024) ||
+				'—',
+			inline: false,
+		});
+
+		if (r.notas.length) {
+			embed.addFields({ name: 'ℹ️ Además', value: r.notas.join('\n').slice(0, 1024), inline: false });
+		}
+	}
+
+	// El GIF se adjunta desde el repo: los enlaces del CDN de Discord caducan
+	const archivos = [];
+	if (cfg.alertImageUrl) {
+		embed.setImage(cfg.alertImageUrl);
+	} else if (fs.existsSync(GIF_ALERTA)) {
+		archivos.push(new AttachmentBuilder(GIF_ALERTA, { name: 'seguridad.gif' }));
+		embed.setImage('attachment://seguridad.gif');
+	}
+
 	try {
-		await canal.send({ embeds: [embed] });
+		await canal.send({ embeds: [embed], files: archivos });
 	} catch (err) {
-		console.error('[SEGURIDAD] No se pudo escribir en el canal de logs:', err.message);
+		console.error('[SEGURIDAD] No se pudo enviar el resumen:', err.message);
 	}
 }
 
@@ -214,20 +334,11 @@ async function startLockdown(guild, cfg, motivo) {
 	s.raids++;
 	s.ultimoRaid = Date.now();
 
-	await log(
-		guild,
-		cfg,
-		new EmbedBuilder()
-			.setColor(0xff0000)
-			.setTitle('🚨 RAID DETECTADO — servidor en lockdown')
-			.setDescription(motivo)
-			.addFields(
-				{ name: 'Duración', value: `${cfg.lockdownMinutes} min`, inline: true },
-				{ name: 'Acción a nuevas entradas', value: cfg.raidAction, inline: true },
-				{ name: 'Verificación', value: 'Subida a ALTA', inline: true },
-			)
-			.setTimestamp(),
-	);
+	registrarIncidente(guild, cfg, {
+		nota:
+			`🚨 **RAID DETECTADO — servidor en lockdown ${cfg.lockdownMinutes} min.** ${motivo} ` +
+			`Verificación subida a ALTA; a quien entre se le aplica: ${cfg.raidAction}.`,
+	});
 
 	return true;
 }
@@ -253,16 +364,9 @@ async function endLockdown(guild, cfg, motivo) {
 		console.error('[SEGURIDAD] No se pudo restaurar el nivel de verificación:', err.message);
 	}
 
-	await log(
-		guild,
-		cfg,
-		new EmbedBuilder()
-			.setColor(0x00cc66)
-			.setTitle('✅ Lockdown terminado')
-			.setDescription(motivo)
-			.addFields({ name: 'Cuentas afectadas', value: String(atrapados), inline: true })
-			.setTimestamp(),
-	);
+	registrarIncidente(guild, cfg, {
+		nota: `✅ **Lockdown terminado.** ${motivo}. Cuentas afectadas: ${atrapados}. Verificación restaurada.`,
+	});
 
 	return true;
 }
@@ -307,20 +411,12 @@ async function onGuildMemberAdd(member) {
 		);
 		if (aplicada) getStats(guild.id).castigados++;
 
-		await log(
-			guild,
-			cfg,
-			new EmbedBuilder()
-				.setColor(0xff6600)
-				.setTitle('⚠️ Entrada durante raid')
-				.setDescription(`${member.user.tag} (${member.id})`)
-				.addFields({
-					name: 'Acción',
-					value: aplicada ?? `sin acción (${cfg.raidAction === 'log' ? 'solo registro' : 'faltan permisos o jerarquía'})`,
-					inline: true,
-				})
-				.setTimestamp(),
-		);
+		registrarIncidente(guild, cfg, {
+			id: member.id,
+			tag: member.user.tag,
+			motivo: 'entró durante el raid',
+			accion: aplicada,
+		});
 		return;
 	}
 
@@ -340,20 +436,12 @@ async function onGuildMemberAdd(member) {
 			s.cuentasNuevas++;
 			if (aplicada) s.castigados++;
 
-			await log(
-				guild,
-				cfg,
-				new EmbedBuilder()
-					.setColor(0xffcc00)
-					.setTitle('👶 Cuenta recién creada')
-					.setDescription(`${member.user.tag} (${member.id})`)
-					.addFields(
-						{ name: 'Edad de la cuenta', value: `${edadDias.toFixed(1)} días`, inline: true },
-						{ name: 'Mínimo exigido', value: `${cfg.minAccountAgeDays} días`, inline: true },
-						{ name: 'Acción', value: aplicada ?? 'solo registro', inline: true },
-					)
-					.setTimestamp(),
-			);
+			// No se cuenta como "detenido de publicar": solo entró
+			registrarIncidente(guild, cfg, {
+				nota:
+					`👶 ${member.user.tag} entró con una cuenta de ${edadDias.toFixed(1)} días ` +
+					`(mínimo ${cfg.minAccountAgeDays})${aplicada ? ` — ${aplicada}` : ''}`,
+			});
 		}
 	}
 }
@@ -465,15 +553,12 @@ async function onMessageCreate(message) {
 		s.invitacionesBorradas += quitados;
 		s.mensajesBorrados += quitados;
 
-		await log(
-			message.guild,
-			cfg,
-			new EmbedBuilder()
-				.setColor(0xffaa00)
-				.setTitle('🔗 Invitación borrada')
-				.setDescription(`${message.author.tag} (${message.author.id}) en <#${message.channel.id}>`)
-				.setTimestamp(),
-		);
+		registrarIncidente(message.guild, cfg, {
+			id: message.author.id,
+			tag: message.author.tag,
+			motivo: 'publicó una invitación a otro servidor',
+			accion: 'mensaje borrado',
+		});
 		return;
 	}
 
@@ -495,25 +580,14 @@ async function onMessageCreate(message) {
 	s.ultimoSpam = Date.now();
 	if (aplicada) s.castigados++;
 
-	await log(
-		message.guild,
-		cfg,
-		new EmbedBuilder()
-			.setColor(0xff3300)
-			.setTitle('🛑 Spam detectado')
-			.setDescription(`${message.author.tag} (${message.author.id})`)
-			.addFields(
-				{ name: 'Motivo', value: motivo },
-				{ name: 'Canal', value: `<#${message.channel.id}>`, inline: true },
-				{
-					name: 'Acción',
-					value: aplicada ? `${aplicada} ${cfg.timeoutMinutes} min` : 'no se pudo castigar (permisos/jerarquía)',
-					inline: true,
-				},
-				{ name: 'Mensajes borrados', value: String(borrados), inline: true },
-			)
-			.setTimestamp(),
-	);
+	registrarIncidente(message.guild, cfg, {
+		id: message.author.id,
+		tag: message.author.tag,
+		motivo,
+		accion: aplicada
+			? `${aplicada} ${cfg.timeoutMinutes} min, ${borrados} msg borrados`
+			: 'no se pudo castigar (permisos/jerarquía)',
+	});
 }
 
 // ==============================
@@ -734,6 +808,7 @@ const AYUDA = [
 	'`castigo <minutos>` — duración del timeout por spam',
 	'`invitaciones on|off` — borrar links discord.gg',
 	'`exento @rol` — añade o quita un rol de la lista de exentos',
+	'`gif <url>` — cambia la imagen de los avisos (sin url usa la que trae el bot)',
 	'`cerrar` / `abrir` — lockdown manual',
 ].join('\n');
 
@@ -882,6 +957,19 @@ async function onCommand(message) {
 			}
 			cfg.exemptRoleIds.splice(i, 1);
 			return guardarYResponder(`❌ ${rol} ya no está exento.`);
+		}
+
+		case 'gif': {
+			const url = args[0];
+			if (!url) {
+				cfg.alertImageUrl = null;
+				return guardarYResponder('🖼️ Se usará el GIF incluido con el bot (`assets/seguridad.gif`).');
+			}
+			if (!/^https?:\/\//i.test(url)) {
+				return message.reply(`Uso: \`${PREFIX}seguridad gif <url>\` (sin url vuelve al GIF por defecto)`);
+			}
+			cfg.alertImageUrl = url;
+			return guardarYResponder('🖼️ Imagen de los avisos actualizada.');
 		}
 
 		case 'cerrar': {
