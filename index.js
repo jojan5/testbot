@@ -5,9 +5,10 @@ var level = require('level').Level;
 const { REST } = require('@discordjs/rest');
 var db = new level('db');
 
-const { createCanvas, loadImage } = require('canvas');
-const { AttachmentBuilder } = require('discord.js');
-
+// Nota: aquí había un require('canvas') y un AttachmentBuilder que no se usaban
+// en este archivo. canvas es un módulo nativo y, si falla al compilarse en el
+// host, tumbaba el bot entero al arrancar. Los usa comandos/Player.js y
+// comandos/playerf.js, que se cargan de forma tolerante más abajo.
 
 const MARVEL_API_KEY = process.env.MARVEL_RIVALS_API_KEY;
 
@@ -66,8 +67,22 @@ const {  IntentsBitField } = require('discord.js');
 const { ApplicationCommandManager, ApplicationCommandType } = require('discord.js');
 const { handleGenshinArmas } = require('./comandos/armas');
 const { handleGenshinArtefactos } = require('./comandos/artefactos');
-const { handlePlayerMarvel } = require('./comandos/Player.js');
-const { handlePlayerFortnite } = require('./comandos/playerf');
+/**
+ * Carga un módulo que puede fallar (por ejemplo los que dependen de canvas,
+ * que es nativo y no siempre compila en el host). Si no carga, se registra el
+ * motivo y el bot sigue arrancando sin ese comando.
+ */
+function requireOpcional(ruta, exportado) {
+	try {
+		return require(ruta)[exportado];
+	} catch (err) {
+		console.error(`[OPCIONAL] No se pudo cargar ${exportado} de ${ruta}: ${err.message}`);
+		return null;
+	}
+}
+
+const handlePlayerMarvel = requireOpcional('./comandos/Player.js', 'handlePlayerMarvel');
+const handlePlayerFortnite = requireOpcional('./comandos/playerf', 'handlePlayerFortnite');
 const { setChannel, getChannel } = require('./configGive');
 const { postFreeGames } = require("./comandos/giveaways");
 
@@ -162,7 +177,16 @@ const commandFiles = fs
   .filter(file => file.endsWith('.js'));
 
 for (const file of commandFiles) {
-  const command = require(`./comandos/${file}`);
+  // Un comando roto (dependencia nativa que no compiló, error de sintaxis...)
+  // no debe impedir que arranque el resto del bot.
+  let command;
+  try {
+    command = require(`./comandos/${file}`);
+  } catch (err) {
+    console.error(`[COMANDOS] No se pudo cargar comandos/${file}: ${err.message}`);
+    continue;
+  }
+  if (!command?.name) continue; // módulos que solo exportan funciones sueltas
   client.commands.set(command.name, command);
 }
 
@@ -961,11 +985,23 @@ client.on('interactionCreate', async (interaction) => {
     }
 
 	if (interaction.commandName === 'playerfortnite') {
+    if (!handlePlayerFortnite) {
+        return interaction.reply({
+            content: '⚠️ Las tarjetas de jugador no están disponibles: el módulo de imágenes (canvas) no se pudo cargar en el servidor.',
+            ephemeral: true,
+        });
+    }
     await handlePlayerFortnite(interaction);
 }
 
 
 if (interaction.commandName === 'playermarvel') {
+   if (!handlePlayerMarvel) {
+       return interaction.reply({
+           content: '⚠️ Las tarjetas de jugador no están disponibles: el módulo de imágenes (canvas) no se pudo cargar en el servidor.',
+           ephemeral: true,
+       });
+   }
    await handlePlayerMarvel(interaction);
 }
     if (interaction.commandName === 'genshinartefactos') {
