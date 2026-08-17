@@ -98,6 +98,10 @@ const client = new Client({
 	]
 	//  , partials :[User,Message.GuildMember, TrheadMember],
 })
+
+// Anti-raid / anti-spam (ver security/antiraid.js y *seguridad ayuda)
+require('./security/antiraid').init(client);
+
 //-------------------------------------------------------------------------------// ==============================
 //  MENSAJES ESPECIALES NAVIDAD / AÑO NUEVO
 //  - Usa twitchConfig[guildId].welcomeChannelId como canal principal
