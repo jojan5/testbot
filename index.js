@@ -3706,6 +3706,7 @@ client.on("messageCreate", (message) => {
 			"**/codigos_honkai** = códigos de Honkai: Star Rail.\n" +
 			"**/codigos_honkai3d** = códigos de Honkai Impact 3rd.\n" +
 			"**/codigoszzz** = códigos actuales de Zenless Zone Zero (Nap).\n" +
+			"**/codigos_wuwa** = códigos actuales de Wuthering Waves.\n" +
 			"**/mistral** = preguntas a la IA (las clásicas IAS).\n" +
 			"\n" +
 			"**/combate** = retas a alguien a un combate por turnos.\n" +
@@ -3716,11 +3717,12 @@ client.on("messageCreate", (message) => {
 			"**/selectchannel** = selecciona el canal donde se anunciarán los directos de Twitch para este servidor.\n" +
 			"**/selecttwitchchannel** = registra el canal de Twitch que quieres que el bot vigile.\n" +
 			"\n" +
+			"**/ping** = comprueba que el bot está vivo y responde.\n" +
 			"**/navidad** = envía los mensajes de Navidad y Año Nuevo.\n" +
 			"**/channel** = muestra el enlace/canal de anuncios principal (según lo que tengas configurado en el bot).\n" +
 			"**/registrarglobal** = registra todos los comandos globalmente (solo admins, no lo toques si no sabes qué haces).\n"+
-			"**/Playerfornite** = te da las estadisticas y rango de un jugador de fortnite\n"+
-			"**/selectgiveaswaychannel** = Selecciona un canal para juegos gratis\n"+
+			"**/playerfortnite** = te da las estadisticas y rango de un jugador de fortnite\n"+
+			"**/setgiveawaychannel** = Selecciona un canal para juegos gratis\n"+
 			"**/playermarvel = muestra las estadisticas de una persona en marvel rivals\n"+
 			"**/playeroverwatch** + BattleTag (Jugador#1234) = tarjeta de Overwatch 2 con tus rangos por rol, "
 			+ "winrate, KDA y los héroes que más juegas. El perfil tiene que estar en público.\n"+
